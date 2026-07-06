@@ -3,17 +3,25 @@ import { useEffect, useState } from "react";
 export type ChoiceOption = { id: string; label: string; disabled?: boolean };
 
 /**
- * Vertical option list with a triangle cursor. ArrowUp/ArrowDown move the
- * cursor (wrapping, skipping disabled options); Space/Enter picks; Escape
- * calls `onCancel` (if provided); mouse hover moves the cursor and click
- * picks. Disabled options render at 40% opacity and are inert to both the
- * keyboard cursor and mouse.
+ * Cursor-navigation core shared by every pixel-kit selection list/grid
+ * (`ChoiceBox`, and Task 8's `ActionMenu`/`TopicsPanel`): tracks which
+ * option index is "active" among `options` (matched by `.id`, skipping any
+ * `.disabled` entries when moving), wraps at the ends, and wires one
+ * `window` keydown listener for Up/Left (-1) and Down/Right (+1) movement,
+ * Space/Enter (pick the active option via `onPick`), and Escape
+ * (`onCancel`, if given). Follows the kit's `defaultPrevented`-guard /
+ * act-then-`preventDefault` convention so only the top overlay reacts to a
+ * keystroke. Left/Right are accepted alongside Up/Down (a superset of the
+ * original vertical-list-only behavior) so a 2-column grid like
+ * `TopicsPanel` can reuse this same hook instead of layering a second
+ * listener on top of it. Callers still own rendering and mouse handling
+ * (hover -> `setCursor`, click -> `onPick` directly).
  */
-export function ChoiceBox({ options, onPick, onCancel }: {
-  options: ChoiceOption[];
-  onPick: (id: string) => void;
-  onCancel?: () => void;
-}) {
+export function useCursor<T extends { id: string; disabled?: boolean }>(
+  options: T[],
+  onPick: (id: string) => void,
+  onCancel?: () => void,
+): { cursor: number; setCursor: (index: number) => void } {
   const enabledIndices = options.reduce<number[]>((acc, o, i) => {
     if (!o.disabled) acc.push(i);
     return acc;
@@ -46,8 +54,8 @@ export function ChoiceBox({ options, onPick, onCancel }: {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;
-      if (e.key === "ArrowUp") { moveCursor(-1); e.preventDefault(); }
-      else if (e.key === "ArrowDown") { moveCursor(1); e.preventDefault(); }
+      if (e.key === "ArrowUp" || e.key === "ArrowLeft") { moveCursor(-1); e.preventDefault(); }
+      else if (e.key === "ArrowDown" || e.key === "ArrowRight") { moveCursor(1); e.preventDefault(); }
       else if (e.key === " " || e.key === "Enter") { pick(); e.preventDefault(); }
       else if (e.key === "Escape" && onCancel) { onCancel(); e.preventDefault(); }
     };
@@ -55,6 +63,23 @@ export function ChoiceBox({ options, onPick, onCancel }: {
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cursor, options, onCancel]);
+
+  return { cursor, setCursor };
+}
+
+/**
+ * Vertical option list with a triangle cursor. ArrowUp/ArrowDown move the
+ * cursor (wrapping, skipping disabled options); Space/Enter picks; Escape
+ * calls `onCancel` (if provided); mouse hover moves the cursor and click
+ * picks. Disabled options render at 40% opacity and are inert to both the
+ * keyboard cursor and mouse.
+ */
+export function ChoiceBox({ options, onPick, onCancel }: {
+  options: ChoiceOption[];
+  onPick: (id: string) => void;
+  onCancel?: () => void;
+}) {
+  const { cursor, setCursor } = useCursor(options, onPick, onCancel);
 
   return (
     <div className="cq-choice-box" data-testid="choice-box">

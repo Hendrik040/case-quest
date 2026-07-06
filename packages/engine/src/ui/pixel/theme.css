@@ -36,11 +36,20 @@
   --cq-panel-fill: #f8f0d8;
   --cq-panel-border: #405828;
 
+  --cq-hp-tag: #f0a028;
+  --cq-hp-bar: #58c838;
+  --cq-hp-track: #404040;
+  --cq-exp-bar: #3890f0;
+
   --cq-advance-glyph: #e03028;
 
   --cq-banner-wood: #a07040;
   --cq-banner-wood-dark: #705028;
   --cq-banner-text: #f8f8f8;
+
+  --cq-encounter-bg: #f0ede0;
+  --cq-pinstripe: #e8e0b8;
+  --cq-platform: #d8c890;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -245,4 +254,318 @@ img.cq-sprite {
 @keyframes cq-band-sweep {
   from { transform: translateX(-120%); }
   to { transform: translateX(120%); }
+}
+
+/* ---------------------------------------------------------------------- */
+/* EncounterScreen (Task 8)                                                */
+/* ---------------------------------------------------------------------- */
+
+.cq-encounter {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: var(--cq-encounter-bg);
+  font-family: var(--cq-font);
+}
+
+.cq-encounter::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: calc(var(--px) * 24);
+  background: repeating-linear-gradient(
+    0deg,
+    var(--cq-pinstripe) 0 calc(var(--px) * 2),
+    transparent calc(var(--px) * 2) calc(var(--px) * 4)
+  );
+}
+
+.cq-platform {
+  position: absolute;
+  background: var(--cq-platform);
+  border-radius: 50%;
+}
+
+.cq-enemy-platform {
+  left: calc(var(--px) * 124);
+  top: calc(var(--px) * 52);
+  width: calc(var(--px) * 88);
+  height: calc(var(--px) * 20);
+}
+
+.cq-player-platform {
+  left: calc(var(--px) * 56);
+  top: calc(var(--px) * 130);
+  width: calc(var(--px) * 96);
+  height: calc(var(--px) * 22);
+}
+
+.cq-enemy-sprite {
+  position: absolute;
+  left: calc(var(--px) * 144);
+  top: calc(var(--px) * 14);
+  width: calc(var(--px) * 48);
+  height: calc(var(--px) * 48);
+  z-index: 5;
+}
+
+.cq-player-sprite {
+  position: absolute;
+  left: calc(var(--px) * 76);
+  top: calc(var(--px) * 101);
+  width: calc(var(--px) * 56);
+  height: calc(var(--px) * 40);
+  z-index: 5;
+}
+
+/* Agent slides in from off-stage right onto its platform; replayed each
+   time `EncounterScreen` keys the sprite by a new `view.actorId`. */
+@keyframes cq-slide-in-right {
+  from { transform: translateX(150%); }
+  to { transform: translateX(0); }
+}
+
+.cq-slide-in {
+  animation: cq-slide-in-right 500ms ease-out;
+}
+
+.cq-prompt-text {
+  font-size: calc(var(--px) * 7);
+  color: var(--cq-battle-text);
+  text-shadow: calc(var(--px) * 1) calc(var(--px) * 1) 0 var(--cq-battle-text-shadow);
+}
+
+/* ---------------------------------------------------------------------- */
+/* InfoPanel (Task 8)                                                      */
+/* ---------------------------------------------------------------------- */
+
+/* Info panels pop in on mount; replayed by `EncounterScreen` keying each
+   panel by `view.actorId`. */
+@keyframes cq-panel-pop-in {
+  from { transform: scale(0); }
+  to { transform: scale(1); }
+}
+
+.cq-panel-pop {
+  animation: cq-panel-pop-in 250ms ease-out;
+  transform-origin: center;
+}
+
+.cq-info-panel {
+  position: absolute;
+  box-sizing: border-box;
+  padding: calc(var(--px) * 2) calc(var(--px) * 3);
+  background: var(--cq-panel-fill);
+  border: calc(var(--px) * 1) solid var(--cq-panel-border);
+  border-radius: calc(var(--px) * 2);
+  font-family: var(--cq-font);
+  color: var(--cq-field-text);
+  z-index: 10;
+}
+
+.cq-agent-info-panel {
+  left: calc(var(--px) * 8);
+  top: calc(var(--px) * 8);
+  width: calc(var(--px) * 92);
+  height: calc(var(--px) * 24);
+}
+
+.cq-player-info-panel {
+  left: calc(var(--px) * 140);
+  top: calc(var(--px) * 92);
+  width: calc(var(--px) * 92);
+  height: calc(var(--px) * 32);
+}
+
+.cq-info-name {
+  font-size: calc(var(--px) * 5);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cq-info-role {
+  font-size: calc(var(--px) * 4);
+  opacity: 0.75;
+  text-transform: uppercase;
+}
+
+.cq-facts-row,
+.cq-case-row {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+  margin-top: calc(var(--px) * 2);
+}
+
+.cq-facts-tag {
+  font-size: calc(var(--px) * 4);
+  color: var(--cq-hp-tag);
+  font-weight: bold;
+}
+
+.cq-facts-track,
+.cq-case-track {
+  flex: 1;
+  height: calc(var(--px) * 3);
+  background: var(--cq-hp-track);
+  border-radius: calc(var(--px) * 1);
+  overflow: hidden;
+}
+
+.cq-facts-fill {
+  height: 100%;
+  background: var(--cq-hp-bar);
+}
+
+.cq-facts-count {
+  font-size: calc(var(--px) * 4);
+  text-align: right;
+  margin-top: calc(var(--px) * 1);
+}
+
+.cq-case-label {
+  font-size: calc(var(--px) * 4);
+}
+
+.cq-case-fill {
+  height: 100%;
+  background: var(--cq-exp-bar);
+}
+
+/* ---------------------------------------------------------------------- */
+/* ActionMenu (Task 8)                                                     */
+/* ---------------------------------------------------------------------- */
+
+.cq-action-menu {
+  position: absolute;
+  right: calc(var(--px) * 4);
+  bottom: calc(var(--px) * 4);
+  width: calc(var(--px) * 72);
+  height: calc(var(--px) * 40);
+  box-sizing: border-box;
+  padding: calc(var(--px) * 3) calc(var(--px) * 4);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: calc(var(--px) * 2);
+  background: var(--cq-battle-box-fill);
+  border: calc(var(--px) * 1) solid var(--cq-battle-box-border-dark);
+  box-shadow: inset 0 0 0 calc(var(--px) * 2) var(--cq-battle-box-border);
+  font-family: var(--cq-font);
+  font-size: calc(var(--px) * 6);
+  color: var(--cq-battle-text);
+  z-index: 26;
+}
+
+.cq-action-option {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+  cursor: pointer;
+}
+
+.cq-action-option.cq-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+  cursor: default;
+}
+
+.cq-action-option.cq-active .cq-choice-cursor {
+  width: 0;
+  height: 0;
+  border-top: calc(var(--px) * 3) solid transparent;
+  border-bottom: calc(var(--px) * 3) solid transparent;
+  border-left: calc(var(--px) * 4) solid var(--cq-battle-text);
+}
+
+/* ---------------------------------------------------------------------- */
+/* TopicsPanel (Task 8)                                                    */
+/* ---------------------------------------------------------------------- */
+
+.cq-topics-panel {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--px) * 4);
+  transform: translateX(-50%);
+  width: calc(var(--px) * 232);
+  min-height: calc(var(--px) * 40);
+  box-sizing: border-box;
+  padding: calc(var(--px) * 4) calc(var(--px) * 6);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: calc(var(--px) * 2) calc(var(--px) * 8);
+  background: var(--cq-panel-fill);
+  border: calc(var(--px) * 2) solid var(--cq-panel-border);
+  border-radius: calc(var(--px) * 3);
+  font-family: var(--cq-font);
+  font-size: calc(var(--px) * 6);
+  color: var(--cq-field-text);
+  z-index: 26;
+}
+
+.cq-topic-option {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--px) * 3);
+  padding: calc(var(--px) * 2) 0;
+  cursor: pointer;
+}
+
+.cq-topic-option.cq-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+  cursor: default;
+}
+
+.cq-topic-option.cq-active .cq-choice-cursor {
+  width: 0;
+  height: 0;
+  border-top: calc(var(--px) * 3) solid transparent;
+  border-bottom: calc(var(--px) * 3) solid transparent;
+  border-left: calc(var(--px) * 4) solid var(--cq-panel-border);
+}
+
+/* ---------------------------------------------------------------------- */
+/* NotesPanel (Task 8)                                                     */
+/* ---------------------------------------------------------------------- */
+
+.cq-notes-panel {
+  position: absolute;
+  left: calc(var(--px) * 24);
+  top: calc(var(--px) * 20);
+  width: calc(var(--px) * 192);
+  min-height: calc(var(--px) * 100);
+  box-sizing: border-box;
+  padding: calc(var(--px) * 6);
+  background: var(--cq-field-box-fill);
+  border: calc(var(--px) * 2) solid var(--cq-field-box-border-outer);
+  box-shadow: inset 0 0 0 calc(var(--px) * 1) var(--cq-field-box-border-inner);
+  border-radius: calc(var(--px) * 4);
+  color: var(--cq-field-text);
+  font-family: var(--cq-font);
+  font-size: calc(var(--px) * 6);
+  z-index: 35;
+  cursor: pointer;
+}
+
+.cq-notes-title {
+  font-size: calc(var(--px) * 6);
+  margin-bottom: calc(var(--px) * 4);
+  font-weight: bold;
+}
+
+.cq-notes-list {
+  margin: 0;
+  padding-left: calc(var(--px) * 8);
+}
+
+.cq-notes-list li {
+  margin-bottom: calc(var(--px) * 3);
+}
+
+.cq-notes-empty {
+  opacity: 0.7;
 }
