@@ -1,0 +1,197 @@
+{
+  "schema_version": "0.1",
+  "meta": {
+    "case_id": "northwind-ecommerce-crossroads",
+    "title": "Northwind Outfitters: The E-commerce Crossroads",
+    "synopsis": "You are Nadia Okonkwo, CEO of Northwind Outfitters, a 40-year-old regional outdoor-gear retailer with twelve stores. Customers keep asking to buy online, two rivals just launched e-commerce, and the board wants a decision. Gather the facts from your leadership team, then choose whether — and how — to enter the online channel.",
+    "protagonist_actor_id": "ceo",
+    "start_node_id": "n_briefing",
+    "source_ref": "Original teaching case authored for Case Quest fixtures (fictional company)."
+  },
+  "learning_objectives": [
+    { "id": "lo_channel_economics", "text": "Understand the unit economics of a new sales channel — margins after platform fees, customer acquisition cost, and fulfillment cost — before committing to it." },
+    { "id": "lo_capability_gap", "text": "Recognize operational capability gaps (fulfillment, systems, staffing) that must be closed before a new channel can succeed." },
+    { "id": "lo_phasing", "text": "Weigh the value of a phased or pilot entry against a full commitment when demand is real but capabilities and economics are uncertain." }
+  ],
+  "actors": [
+    {
+      "id": "ceo",
+      "name": "Nadia Okonkwo",
+      "role": "protagonist",
+      "is_playable": true,
+      "persona": {
+        "background": "CEO of Northwind Outfitters for six years; grew the store base but has never run a digital channel.",
+        "personality": "Decisive and customer-obsessed, but aware of what she doesn't know about e-commerce.",
+        "communication_style": "Asks pointed questions and expects specifics."
+      },
+      "goals": ["Protect the brand and the stores", "Meet customers where they now shop", "Not bet the company on an unproven channel"],
+      "knowledge": []
+    },
+    {
+      "id": "cfo",
+      "name": "Marcus Reilly",
+      "role": "npc",
+      "is_playable": false,
+      "persona": {
+        "background": "CFO who has run Northwind's finances for a decade and guards the balance sheet.",
+        "personality": "Conservative, numbers-first, skeptical of hype.",
+        "communication_style": "Speaks in margins, payback periods, and downside cases."
+      },
+      "goals": ["Keep the company solvent", "Insist any new channel earns its capital"],
+      "knowledge": ["fact_margin", "fact_capital", "fact_burn_rate"],
+      "dialogue": {
+        "greeting": "Nadia. Before anyone gets excited about a website, let's talk about what a dollar of online revenue actually keeps.",
+        "topics": [
+          { "fact_id": "fact_margin", "line": "After marketplace fees, payment processing, and returns, online gross margin lands around 8 percent. In the stores we clear 35." }
+        ]
+      }
+    },
+    {
+      "id": "cmo",
+      "name": "Priya Anand",
+      "role": "npc",
+      "is_playable": false,
+      "persona": {
+        "background": "Head of marketing; closest to the customer research and the demand signals.",
+        "personality": "Optimistic and data-driven, pushes for growth.",
+        "communication_style": "Leads with customer voice and survey numbers."
+      },
+      "goals": ["Capture online demand before rivals lock it in"],
+      "knowledge": ["fact_cac", "fact_demand"],
+      "dialogue": {
+        "greeting": "The customers are already voting with their questions — let me show you the demand data.",
+        "topics": [
+          { "fact_id": "fact_demand", "line": "Forty percent of our loyalty members asked for online ordering this year. The demand is real and it's growing." }
+        ]
+      }
+    },
+    {
+      "id": "coo",
+      "name": "Sam Delgado",
+      "role": "npc",
+      "is_playable": false,
+      "persona": {
+        "background": "COO responsible for the single distribution warehouse and store logistics.",
+        "personality": "Grounded, protective of operations, honest about limits.",
+        "communication_style": "Concrete about what the operation can and cannot do today."
+      },
+      "goals": ["Not promise fulfillment the operation can't deliver"],
+      "knowledge": ["fact_fulfillment", "fact_logistics_partner"]
+    },
+    {
+      "id": "advisor",
+      "name": "Eleanor Voss",
+      "role": "npc",
+      "is_playable": false,
+      "persona": {
+        "background": "Board chair and former retail executive who has watched competitors move online.",
+        "personality": "Strategic, patient, asks about the long game.",
+        "communication_style": "Frames choices against the competitive landscape."
+      },
+      "goals": ["Position Northwind to win over five years, not one quarter"],
+      "knowledge": ["fact_competitor"]
+    }
+  ],
+  "locations": [
+    { "id": "hq_office", "name": "Executive Office", "type": "office", "exits": ["boardroom"] },
+    { "id": "boardroom", "name": "Boardroom", "type": "boardroom", "exits": ["hq_office", "fulfillment_warehouse"] },
+    { "id": "fulfillment_warehouse", "name": "Distribution Warehouse", "type": "warehouse", "exits": ["boardroom"] }
+  ],
+  "facts": [
+    { "id": "fact_margin", "label": "Online margins", "content": "After platform fees, payment processing, and returns, e-commerce gross margin is ~8% versus ~35% in the stores.", "sources": [{ "actor_id": "cfo", "location_id": "hq_office" }] },
+    { "id": "fact_capital", "label": "Available capital", "content": "Northwind can fund a modest pilot comfortably, but a full own-platform build plus warehouse automation would strain the balance sheet.", "sources": [{ "actor_id": "cfo", "location_id": "hq_office" }] },
+    { "id": "fact_demand", "label": "Customer demand", "content": "40% of loyalty members requested online ordering this year; demand is real and rising.", "sources": [{ "actor_id": "cmo", "location_id": "boardroom" }] },
+    { "id": "fact_cac", "label": "Acquisition cost", "content": "Paid online customer acquisition cost is high; at current margins, payback is roughly 14 months per new online customer.", "sources": [{ "actor_id": "cmo", "location_id": "boardroom" }] },
+    { "id": "fact_fulfillment", "label": "Fulfillment gap", "content": "The warehouse is built for store replenishment, not direct-to-consumer picking, packing, and returns; it needs new systems and staff.", "sources": [{ "actor_id": "coo", "location_id": "fulfillment_warehouse" }] },
+    { "id": "fact_competitor", "label": "Competitor moves", "content": "Two rivals launched online last year: one is struggling with fulfillment, the other is growing steadily by starting narrow.", "sources": [{ "actor_id": "advisor", "location_id": "boardroom" }] },
+    { "id": "fact_logistics_partner", "label": "3PL option", "content": "A third-party logistics provider could handle direct-to-consumer fulfillment for a pilot without Northwind building its own capability first.", "sources": [{ "actor_id": "coo", "location_id": "fulfillment_warehouse" }] },
+    { "id": "fact_burn_rate", "label": "Full-launch burn", "content": "A full own-platform launch would run a significant monthly cash burn for at least a year before contribution turns positive.", "sources": [{ "actor_id": "cfo", "location_id": "hq_office" }] }
+  ],
+  "decisions": [
+    {
+      "id": "d_approach",
+      "prompt": "How should Northwind respond to the online opportunity?",
+      "requires_facts": ["fact_margin", "fact_demand", "fact_fulfillment", "fact_capital"],
+      "options": [
+        { "id": "pilot", "label": "Launch a limited pilot", "consequence_text": "You choose to test the channel before committing, keeping capital and operational risk contained.", "illuminates": ["lo_phasing", "lo_capability_gap"], "leads_to": "n_pilot" },
+        { "id": "full_launch", "label": "Commit to a full e-commerce launch", "consequence_text": "You decide to go big to match rivals, accepting the capital and operational stretch.", "illuminates": ["lo_channel_economics"], "leads_to": "n_full_commit" },
+        { "id": "decline", "label": "Stay stores-only for now", "consequence_text": "You hold off entirely, betting the stores remain enough while you watch how rivals fare.", "illuminates": ["lo_channel_economics"], "leads_to": "end_status_quo" }
+      ]
+    },
+    {
+      "id": "d_pilot_scope",
+      "prompt": "How should the pilot be run?",
+      "requires_facts": ["fact_cac", "fact_competitor", "fact_logistics_partner"],
+      "options": [
+        { "id": "marketplace", "label": "Sell via an existing marketplace using a 3PL", "consequence_text": "You start narrow: list a curated range on an established marketplace and outsource fulfillment, learning fast with little capital.", "illuminates": ["lo_channel_economics", "lo_phasing"], "leads_to": "end_pilot_success" },
+        { "id": "own_site", "label": "Build your own storefront for the pilot", "consequence_text": "You build a bespoke site for even a small pilot, sinking time and cash into capability you can't yet judge you need.", "illuminates": ["lo_capability_gap"], "leads_to": "end_overbuild" }
+      ]
+    },
+    {
+      "id": "d_commit_size",
+      "prompt": "How aggressively should the full launch be funded?",
+      "requires_facts": ["fact_margin", "fact_capital", "fact_burn_rate"],
+      "options": [
+        { "id": "measured", "label": "Fund a measured, staged rollout", "consequence_text": "Even at full commitment you stage the build, closing capability gaps before scaling spend.", "illuminates": ["lo_phasing"], "leads_to": "end_pilot_success" },
+        { "id": "aggressive", "label": "Fund an aggressive all-in build", "consequence_text": "You spend hard on platform and automation up front, racing rivals before the economics are proven.", "illuminates": ["lo_capability_gap"], "leads_to": "end_overbuild" }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "id": "n_briefing",
+      "title": "The Leadership Briefing",
+      "accessible_locations": ["hq_office", "boardroom", "fulfillment_warehouse"],
+      "present_actors": ["cfo", "cmo", "coo", "advisor"],
+      "available_facts": ["fact_margin", "fact_capital", "fact_demand", "fact_cac", "fact_fulfillment", "fact_competitor"],
+      "live_decisions": ["d_approach"]
+    },
+    {
+      "id": "n_pilot",
+      "title": "Designing the Pilot",
+      "accessible_locations": ["fulfillment_warehouse"],
+      "present_actors": ["coo"],
+      "available_facts": ["fact_logistics_partner"],
+      "live_decisions": ["d_pilot_scope"]
+    },
+    {
+      "id": "n_full_commit",
+      "title": "Sizing the Bet",
+      "accessible_locations": ["hq_office"],
+      "present_actors": ["cfo"],
+      "available_facts": ["fact_burn_rate"],
+      "live_decisions": ["d_commit_size"]
+    }
+  ],
+  "endings": [
+    {
+      "id": "end_status_quo",
+      "title": "Holding the Line",
+      "summary": "Northwind stays stores-only. It stays profitable for now, but online-native rivals keep capturing the customers who wanted to buy digitally.",
+      "real_case_comparison": "Retailers who indefinitely deferred a channel their customers were already demanding tended to cede the segment; the demand did not wait.",
+      "lo_outcomes": [
+        { "lo_id": "lo_channel_economics", "verdict": "You avoided a low-margin channel's risks, but the debrief shows demand this strong rarely rewards waiting." },
+        { "lo_id": "lo_phasing", "verdict": "Declining entirely forwent the low-risk option of learning through a small pilot." }
+      ]
+    },
+    {
+      "id": "end_pilot_success",
+      "title": "Learning Before Betting",
+      "summary": "By starting narrow and closing capability gaps before scaling, Northwind builds a channel that pays back — expanding only once the economics are proven.",
+      "real_case_comparison": "The rival that started narrow and staged its expansion is the one that grew steadily; disciplined phasing beat racing to scale.",
+      "lo_outcomes": [
+        { "lo_id": "lo_phasing", "verdict": "You matched commitment to what you'd actually learned — the phased path this case rewards." },
+        { "lo_id": "lo_channel_economics", "verdict": "You let the unit economics prove out before scaling spend." }
+      ]
+    },
+    {
+      "id": "end_overbuild",
+      "title": "Building Ahead of the Evidence",
+      "summary": "Northwind sinks capital into platform and fulfillment capability before demand and economics justify it. Cash burns faster than the channel matures.",
+      "real_case_comparison": "The rival that overbuilt fulfillment before proving demand struggled under the cost — capability outran the evidence for it.",
+      "lo_outcomes": [
+        { "lo_id": "lo_capability_gap", "verdict": "You built capability the channel might need someday before confirming it needed it now — capability must follow proven demand, not precede it." }
+      ]
+    }
+  ]
+}
