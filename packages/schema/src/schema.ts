@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+/** The one and only source of truth for the schema version. */
+export const SCHEMA_VERSION = "0.1" as const;
+
 export const LOCATION_TYPES = [
   "office", "boardroom", "factory_floor", "shopfront",
   "warehouse", "client_site", "street", "home",
@@ -114,7 +117,7 @@ export const WorldMetaSchema = z.object({
 });
 
 export const WorldSchema = z.object({
-  schema_version: z.literal("0.1"),
+  schema_version: z.literal(SCHEMA_VERSION),
   meta: WorldMetaSchema,
   learning_objectives: z.array(LearningObjectiveSchema),
   actors: z.array(ActorSchema),
