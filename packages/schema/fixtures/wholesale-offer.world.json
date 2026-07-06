@@ -1,0 +1,191 @@
+{
+  "schema_version": "0.1",
+  "meta": {
+    "case_id": "wholesale-offer",
+    "title": "The Wholesale Offer",
+    "synopsis": "You are Maya, founder of Ember & Oak, a small specialty coffee roastery. A regional grocery chain has offered a large wholesale contract. It could double your revenue — or break your operation. Find out what you're really signing up for, then decide.",
+    "protagonist_actor_id": "owner",
+    "start_node_id": "node_the_offer",
+    "source_ref": "Original teaching case authored for Case Quest fixtures."
+  },
+  "learning_objectives": [
+    {
+      "id": "lo_capacity_vs_growth",
+      "text": "Understand the tradeoff between seizing a growth opportunity and the operational capacity and cash required to deliver on it, and why capacity must lead growth rather than follow it."
+    }
+  ],
+  "actors": [
+    {
+      "id": "owner",
+      "name": "Maya",
+      "role": "protagonist",
+      "is_playable": true,
+      "persona": {
+        "background": "Founder and owner of Ember & Oak, which she started five years ago. She knows coffee and her customers, less so operations at scale.",
+        "personality": "Ambitious and relationship-driven, prone to optimism about growth.",
+        "communication_style": "Warm and direct."
+      },
+      "goals": ["Keep the roastery alive", "Grow, but without betting the company"],
+      "knowledge": []
+    },
+    {
+      "id": "roaster",
+      "name": "Sam",
+      "role": "npc",
+      "is_playable": false,
+      "persona": {
+        "background": "Head roaster; runs the roasting floor day to day and knows exactly what the equipment can do.",
+        "personality": "Practical, protective of quality, wary of overpromising.",
+        "communication_style": "Blunt, concrete, talks in numbers."
+      },
+      "goals": ["Protect roast quality", "Not be asked to do the impossible"],
+      "knowledge": ["fact_capacity"],
+      "dialogue": {
+        "greeting": "Maya. If this is about the grocery deal, we should talk about what these machines can actually handle.",
+        "topics": [
+          {
+            "fact_id": "fact_capacity",
+            "line": "Flat out, we can roast about 500 kilos a week without dropping quality. The contract wants 900. That's not a stretch, that's a different factory."
+          }
+        ]
+      }
+    },
+    {
+      "id": "bookkeeper",
+      "name": "Dev",
+      "role": "npc",
+      "is_playable": false,
+      "persona": {
+        "background": "Part-time bookkeeper who manages the roastery's cash and books.",
+        "personality": "Careful, risk-aware, allergic to surprises.",
+        "communication_style": "Measured, hedges with caveats."
+      },
+      "goals": ["Keep the business solvent"],
+      "knowledge": ["fact_cash"],
+      "dialogue": {
+        "greeting": "Before you sign anything — do you want the good news or the cash-flow news?",
+        "topics": [
+          {
+            "fact_id": "fact_cash",
+            "line": "We have about three months of runway. Expanding capacity to hit 900 kilos would eat two of those months up front, before the contract pays a cent."
+          }
+        ]
+      }
+    },
+    {
+      "id": "buyer",
+      "name": "Ana",
+      "role": "npc",
+      "is_playable": false,
+      "persona": {
+        "background": "Procurement lead for the grocery chain, visiting to close the deal.",
+        "personality": "Friendly but firm; she has targets to hit.",
+        "communication_style": "Polished, persuasive, precise on terms."
+      },
+      "goals": ["Secure reliable supply at a good price"],
+      "knowledge": ["fact_contract"],
+      "dialogue": {
+        "greeting": "Maya! We're excited about Ember & Oak. Let me walk you through the terms.",
+        "topics": [
+          {
+            "fact_id": "fact_contract",
+            "line": "It's 900 kilos a week, twelve months, at 30 percent below your retail price. Standard for us — but there's a cancellation penalty if you can't deliver."
+          }
+        ]
+      }
+    }
+  ],
+  "locations": [
+    {
+      "id": "roastery_floor",
+      "name": "Roastery Floor",
+      "type": "factory_floor",
+      "exits": ["back_office"]
+    },
+    {
+      "id": "back_office",
+      "name": "Back Office",
+      "type": "office",
+      "exits": ["roastery_floor"]
+    }
+  ],
+  "facts": [
+    {
+      "id": "fact_capacity",
+      "label": "Roasting capacity",
+      "content": "The roastery can process about 500 kg/week at quality; the contract requires 900 kg/week — a capacity gap that needs a real expansion.",
+      "sources": [{ "actor_id": "roaster", "location_id": "roastery_floor" }]
+    },
+    {
+      "id": "fact_cash",
+      "label": "Cash runway",
+      "content": "The business has ~3 months of cash runway; expanding capacity would consume ~2 months of it up front, before contract revenue arrives.",
+      "sources": [{ "actor_id": "bookkeeper", "location_id": "back_office" }]
+    },
+    {
+      "id": "fact_contract",
+      "label": "Contract terms",
+      "content": "900 kg/week for 12 months at 30% below retail price, with a cancellation penalty for non-delivery.",
+      "sources": [{ "actor_id": "buyer" }]
+    }
+  ],
+  "decisions": [
+    {
+      "id": "decide_contract",
+      "prompt": "Do you accept the grocery chain's wholesale contract?",
+      "requires_facts": ["fact_capacity", "fact_cash", "fact_contract"],
+      "options": [
+        {
+          "id": "accept",
+          "label": "Accept the contract",
+          "consequence_text": "You sign. Demand immediately outstrips what the floor can produce. You rush an expansion, burning most of your cash runway, and quality slips under the pressure of volume you weren't built for.",
+          "illuminates": ["lo_capacity_vs_growth"],
+          "leads_to": "end_overextended"
+        },
+        {
+          "id": "decline",
+          "label": "Decline the contract, for now",
+          "consequence_text": "You pass, explaining you'd need to expand capacity first. The chain signs a competitor. Ember & Oak stays stable and profitable — but you watch a rival take the growth you turned down.",
+          "illuminates": ["lo_capacity_vs_growth"],
+          "leads_to": "end_stable"
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "id": "node_the_offer",
+      "title": "The Offer on the Table",
+      "accessible_locations": ["roastery_floor", "back_office"],
+      "present_actors": ["roaster", "bookkeeper", "buyer"],
+      "available_facts": ["fact_capacity", "fact_cash", "fact_contract"],
+      "live_decisions": ["decide_contract"]
+    }
+  ],
+  "endings": [
+    {
+      "id": "end_overextended",
+      "title": "Overextended",
+      "summary": "Ember & Oak wins the contract but cannot deliver at quality or price. Cash dries up during the rushed expansion and the relationship sours under missed deliveries.",
+      "real_case_comparison": "In the real case this fixture is modeled on, a small roaster that accepted a similar deal defaulted within a year — the cancellation penalty and quality complaints compounded faster than the new revenue arrived.",
+      "lo_outcomes": [
+        {
+          "lo_id": "lo_capacity_vs_growth",
+          "verdict": "You prioritized growth over capacity. The outcome shows why capacity and cash must lead a growth commitment, not scramble to catch up to it."
+        }
+      ]
+    },
+    {
+      "id": "end_stable",
+      "title": "Stable, but Watching Rivals",
+      "summary": "Ember & Oak stays solvent and keeps its quality, but forgoes the growth — and a competitor captures the account.",
+      "real_case_comparison": "Firms that declined similar deals to protect capacity typically survived comfortably; the strongest instead negotiated a phased ramp (smaller initial volume with staged expansion) to capture growth without betting the company.",
+      "lo_outcomes": [
+        {
+          "lo_id": "lo_capacity_vs_growth",
+          "verdict": "You protected capacity and cash. The debrief highlights the real cost of foregone growth — and how a phased ramp could have captured it safely."
+        }
+      ]
+    }
+  ]
+}
