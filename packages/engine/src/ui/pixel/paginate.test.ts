@@ -19,4 +19,8 @@ describe("paginate", () => {
     const pages = paginate("a b c d e f", 1, 2);
     expect(pages).toEqual([["a", "b"], ["c", "d"], ["e", "f"]]);
   });
+  it("clamps degenerate cols/lines instead of hanging", () => {
+    expect(paginate("ab", 0, 2)).toEqual([["a", "b"]]);
+    expect(paginate("a b", 5, 0)).toEqual([["a b"]]);
+  });
 });

@@ -1,5 +1,7 @@
 /** Word-wrap text into pages of `lines` rows × `cols` chars (Gen-3 message box). */
 export function paginate(text: string, cols: number, lines: number): string[][] {
+  cols = Math.max(1, Math.floor(cols));
+  lines = Math.max(1, Math.floor(lines));
   const words = text.split(/\s+/).filter((w) => w.length > 0);
   const rows: string[] = [];
   let current = "";
