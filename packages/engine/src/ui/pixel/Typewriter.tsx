@@ -52,6 +52,7 @@ export function Typewriter({ text, cols = 30, lines = 2, speed = 35, onDone, ski
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.repeat) return;
       if (e.defaultPrevented) return;
       if (e.key === " " || e.key === "Enter") { advanceRef.current(); e.preventDefault(); }
     };

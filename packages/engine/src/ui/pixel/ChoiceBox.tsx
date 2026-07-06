@@ -53,6 +53,7 @@ export function useCursor<T extends { id: string; disabled?: boolean }>(
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.repeat) return;
       if (e.defaultPrevented) return;
       if (e.key === "ArrowUp" || e.key === "ArrowLeft") { moveCursor(-1); e.preventDefault(); }
       else if (e.key === "ArrowDown" || e.key === "ArrowRight") { moveCursor(1); e.preventDefault(); }

@@ -47,6 +47,12 @@ export class WorldScene extends Phaser.Scene {
   private moving = false;
   private frozen = false;
 
+  // Latches a Space press/release that lands entirely within a single
+  // update() call while frozen/moving was blocking input, so a step-time
+  // (or freeze-window) tap of the interact key isn't lost to Key.onUp
+  // clearing Phaser's internal `_justDown` flag before we ever read it.
+  private interactQueued = false;
+
   constructor() { super("world"); }
 
   init(data: { session: GameSession; bus: EventBus }) {
@@ -60,7 +66,13 @@ export class WorldScene extends Phaser.Scene {
     this.interactKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
     this.renderLocation();
     this.bus.on("scene:render", () => this.renderLocation());
-    this.bus.on("world:freeze", ({ frozen }) => { this.frozen = frozen; });
+    this.bus.on("world:freeze", ({ frozen }) => {
+      this.frozen = frozen;
+      // A press made just before a freeze begins shouldn't fire the instant
+      // the game thaws — only latched presses made *during* the freeze (or
+      // a move step) should survive it.
+      if (frozen) this.interactQueued = false;
+    });
     if (import.meta.env.DEV) (window as unknown as { __cqScene?: WorldScene }).__cqScene = this;
   }
 
@@ -179,6 +191,12 @@ export class WorldScene extends Phaser.Scene {
   }
 
   update() {
+    // Latch the edge every frame, before the early return: Key.onUp clears
+    // Phaser's internal `_justDown` flag unconditionally, so a press+release
+    // that happens entirely within a frozen/moving frame would otherwise
+    // never be observed by JustDown once we're free to act again.
+    this.interactQueued ||= Phaser.Input.Keyboard.JustDown(this.interactKey);
+
     if (!this.player || this.frozen || this.moving) return;
 
     const dir = this.readDirection();
@@ -189,6 +207,9 @@ export class WorldScene extends Phaser.Scene {
       if (!this.isBlocked(targetTx, targetTy)) this.stepTo(targetTx, targetTy);
     }
 
-    if (Phaser.Input.Keyboard.JustDown(this.interactKey)) this.interact();
+    if (this.interactQueued) {
+      this.interactQueued = false;
+      this.interact();
+    }
   }
 }
