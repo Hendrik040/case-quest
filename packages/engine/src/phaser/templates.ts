@@ -1,7 +1,7 @@
 import type { LocationType } from "@case-quest/schema";
 
 export const TILE = { FLOOR: 0, WALL: 1, DOOR: 2, DESK: 3 } as const;
-export const TILE_SIZE = 32;
+export const TILE_SIZE = 16;
 
 export interface Point { x: number; y: number; }
 export interface RoomTemplate {
