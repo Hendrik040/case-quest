@@ -82,6 +82,7 @@ describe("GameSession — decisions + debrief", () => {
   it("accept -> end_overextended", () => {
     const s = newSession();
     gatherAll(s);
+    s.startDecision("decide_contract");
     const r = s.chooseOption("decide_contract", "accept", "Growth outweighs the risk.");
     expect(r.endedAt).toBe("ending");
     expect(s.isEnded()).toBe(true);
@@ -90,12 +91,14 @@ describe("GameSession — decisions + debrief", () => {
   it("decline -> end_stable", () => {
     const s = newSession();
     gatherAll(s);
+    s.startDecision("decide_contract");
     s.chooseOption("decide_contract", "decline", "Capacity first.");
     expect(s.currentEnding()!.id).toBe("end_stable");
   });
   it("debrief joins objectives and records reasoning", () => {
     const s = newSession();
     gatherAll(s);
+    s.startDecision("decide_contract");
     s.chooseOption("decide_contract", "decline", "Protect the roastery.");
     const d = s.debrief()!;
     expect(d.ending.id).toBe("end_stable");
@@ -111,9 +114,95 @@ describe("GameSession — decisions + debrief", () => {
   it("rejects mutations after the game has ended", () => {
     const s = newSession();
     gatherAll(s);
+    s.startDecision("decide_contract");
     s.chooseOption("decide_contract", "accept", "go");
     expect(() => s.moveTo("roastery_floor")).toThrow();
     expect(() => s.gatherFactsFromActor("roaster")).toThrow();
     expect(() => s.chooseOption("decide_contract", "decline", "again")).toThrow();
+  });
+});
+
+describe("GameSession — encounter machine", () => {
+  it("boots roaming; maybeStartChain queues the start room's agents once", () => {
+    const s = newSession();
+    expect(s.mode()).toBe("roaming");
+    const v = s.maybeStartChain();
+    expect(s.mode()).toBe("encounter");
+    expect(v?.actorId).toBe("roaster");
+    expect(v?.chainLength).toBe(2); // roaster + buyer live on roastery_floor
+    expect(v?.topics).toEqual([{ factId: "fact_capacity", label: expect.any(String), asked: false }]);
+  });
+  it("maybeStartChain is null on revisit and in non-roaming modes", () => {
+    const s = newSession();
+    s.maybeStartChain();
+    expect(s.maybeStartChain()).toBeNull(); // already in encounter
+    while (s.encounterMoveOn().next) { /* drain chain */ }
+    expect(s.mode()).toBe("roaming");
+    expect(s.maybeStartChain()).toBeNull(); // visited
+  });
+  it("encounterAsk reveals the line, gathers the fact, and marks the topic asked", () => {
+    const s = newSession();
+    s.maybeStartChain();
+    const { line } = s.encounterAsk("fact_capacity");
+    expect(line).toContain("500");
+    expect(s.isFactGathered("fact_capacity")).toBe(true);
+    expect(s.encounterState()?.topics[0].asked).toBe(true);
+    expect(() => s.encounterAsk("fact_capacity")).toThrow(); // already asked
+    expect(() => s.encounterAsk("fact_cash")).toThrow();     // not this actor's topic
+  });
+  it("moveOn advances the chain then returns to roaming", () => {
+    const s = newSession();
+    s.maybeStartChain();
+    const step = s.encounterMoveOn();
+    expect(step.next?.actorId).toBe("buyer");
+    expect(s.encounterMoveOn().next).toBeNull();
+    expect(s.mode()).toBe("roaming");
+  });
+  it("walk-up re-open works after the chain and reuses asked state", () => {
+    const s = newSession();
+    s.maybeStartChain();
+    s.encounterAsk("fact_capacity");
+    s.encounterMoveOn(); s.encounterMoveOn();
+    const v = s.startEncounterWith("roaster");
+    expect(v.chainLength).toBe(1);
+    expect(v.topics[0].asked).toBe(true);
+    expect(() => s.startEncounterWith("bookkeeper")).toThrow(); // other room
+  });
+  it("pollDecisionPrompt fires exactly once when the last fact lands", () => {
+    const s = newSession();
+    s.maybeStartChain();
+    s.encounterAsk("fact_capacity");
+    s.encounterMoveOn(); // buyer
+    s.encounterAsk("fact_contract");
+    s.encounterMoveOn();
+    expect(s.pollDecisionPrompt()).toBe(false); // 2/3 facts
+    s.moveTo("back_office");
+    const v = s.maybeStartChain();
+    expect(v?.actorId).toBe("bookkeeper");
+    s.encounterAsk("fact_cash");
+    s.encounterMoveOn();
+    expect(s.pollDecisionPrompt()).toBe(true);
+    expect(s.pollDecisionPrompt()).toBe(false); // once only
+  });
+  it("decision flow: start requires unlock, cancel returns to roaming, choose ends", () => {
+    const s = newSession();
+    expect(() => s.startDecision("decide_contract")).toThrow(); // locked
+    s.maybeStartChain(); s.encounterAsk("fact_capacity"); s.encounterMoveOn();
+    s.encounterAsk("fact_contract"); s.encounterMoveOn();
+    s.moveTo("back_office"); s.maybeStartChain(); s.encounterAsk("fact_cash"); s.encounterMoveOn();
+    s.startDecision("decide_contract");
+    expect(s.mode()).toBe("decision");
+    s.cancelDecision();
+    expect(s.mode()).toBe("roaming");
+    s.startDecision("decide_contract");
+    expect(s.chooseOption("decide_contract", "decline", "capacity first").endedAt).toBe("ending");
+    expect(s.mode()).toBe("debrief");
+  });
+  it("chooseOption throws outside decision mode; encounter calls throw while roaming", () => {
+    const s = newSession();
+    expect(() => s.encounterAsk("fact_capacity")).toThrow();
+    expect(() => s.encounterMoveOn()).toThrow();
+    gatherAll(s); // legacy helper still gathers facts directly
+    expect(() => s.chooseOption("decide_contract", "decline", "r")).toThrow(/decision/);
   });
 });

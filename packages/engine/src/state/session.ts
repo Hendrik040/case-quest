@@ -1,12 +1,20 @@
 import type {
   World, StoryNode, Location, Actor, Decision, LearningObjective, Ending,
 } from "@case-quest/schema";
+import { resolvePlacement } from "./placement";
 
 export interface ChoiceRecord { decisionId: string; optionId: string; reasoning: string; }
 export interface DebriefData {
   ending: Ending;
   objectives: { objective: LearningObjective; verdict: string }[];
   choices: { prompt: string; chosenLabel: string; reasoning: string }[];
+}
+
+export type SessionMode = "roaming" | "encounter" | "decision" | "debrief";
+export interface EncounterTopic { factId: string; label: string; asked: boolean; }
+export interface EncounterView {
+  actorId: string; name: string; role: string; greeting?: string;
+  topics: EncounterTopic[]; chainIndex: number; chainLength: number;
 }
 
 export class GameSession {
@@ -23,6 +31,12 @@ export class GameSession {
   private readonly gathered = new Set<string>();
   private readonly choices: ChoiceRecord[] = [];
   private endingId: string | null = null;
+
+  private internalMode: "roaming" | "encounter" | "decision" = "roaming";
+  private chain: string[] = [];
+  private chainIdx = 0;
+  private readonly visited = new Set<string>();
+  private decisionPrompted = false;
 
   constructor(world: World) {
     this.worldRef = world;
@@ -70,6 +84,112 @@ export class GameSession {
     const needed = d ? d.requires_facts.length : 0;
     const got = d ? d.requires_facts.filter((f) => this.gathered.has(f)).length : 0;
     return { nodeTitle: node.title, needed, got };
+  }
+
+  // --- encounter machine ---
+  mode(): SessionMode { return this.isEnded() ? "debrief" : this.internalMode; }
+
+  private topicsForActor(actor: Actor): EncounterTopic[] {
+    const available = new Set(this.currentNode().available_facts);
+    return actor.knowledge
+      .filter((factId) => available.has(factId))
+      .map((factId) => {
+        const fact = this.worldRef.facts.find((f) => f.id === factId)!;
+        return { factId, label: fact.label, asked: this.gathered.has(factId) };
+      });
+  }
+
+  private buildEncounterView(): EncounterView {
+    const actorId = this.chain[this.chainIdx];
+    const actor = this.actorsById.get(actorId)!;
+    return {
+      actorId,
+      name: actor.name,
+      role: actor.role,
+      greeting: actor.dialogue?.greeting,
+      topics: this.topicsForActor(actor),
+      chainIndex: this.chainIdx,
+      chainLength: this.chain.length,
+    };
+  }
+
+  maybeStartChain(): EncounterView | null {
+    if (this.internalMode !== "roaming") return null;
+    const key = `${this.currentNodeId}:${this.locationId}`;
+    const alreadyVisited = this.visited.has(key);
+    this.visited.add(key);
+    if (alreadyVisited) return null;
+    const { npcIds } = resolvePlacement(this.worldRef, this.currentNode(), this.locationId);
+    if (npcIds.length === 0) return null;
+    this.chain = npcIds;
+    this.chainIdx = 0;
+    this.internalMode = "encounter";
+    return this.buildEncounterView();
+  }
+
+  startEncounterWith(actorId: string): EncounterView {
+    this.assertActive();
+    if (this.internalMode !== "roaming") throw new Error("cannot start an encounter outside roaming");
+    const { npcIds } = resolvePlacement(this.worldRef, this.currentNode(), this.locationId);
+    if (!npcIds.includes(actorId)) throw new Error(`"${actorId}" is not present at "${this.locationId}"`);
+    this.chain = [actorId];
+    this.chainIdx = 0;
+    this.internalMode = "encounter";
+    return this.buildEncounterView();
+  }
+
+  encounterState(): EncounterView | null {
+    if (this.internalMode !== "encounter") return null;
+    return this.buildEncounterView();
+  }
+
+  encounterAsk(factId: string): { line: string } {
+    this.assertActive();
+    if (this.internalMode !== "encounter") throw new Error("no encounter in progress");
+    const view = this.buildEncounterView();
+    const topic = view.topics.find((t) => t.factId === factId);
+    if (!topic || topic.asked) throw new Error(`"${factId}" is not an open topic here`);
+    const actor = this.actorsById.get(view.actorId)!;
+    const dialogueTopic = actor.dialogue?.topics?.find((t) => t.fact_id === factId);
+    const fact = this.worldRef.facts.find((f) => f.id === factId);
+    const line = dialogueTopic?.line ?? (fact ? `${fact.label}: ${fact.content}` : factId);
+    this.gathered.add(factId);
+    return { line };
+  }
+
+  encounterMoveOn(): { next: EncounterView | null } {
+    this.assertActive();
+    if (this.internalMode !== "encounter") throw new Error("no encounter in progress");
+    this.chainIdx += 1;
+    if (this.chainIdx >= this.chain.length) {
+      this.internalMode = "roaming";
+      this.chain = [];
+      this.chainIdx = 0;
+      return { next: null };
+    }
+    return { next: this.buildEncounterView() };
+  }
+
+  pollDecisionPrompt(): boolean {
+    if (this.decisionPrompted) return false;
+    const first = this.liveDecisions()[0];
+    if (!first || !this.isDecisionUnlocked(first.id)) return false;
+    this.decisionPrompted = true;
+    return true;
+  }
+
+  startDecision(decisionId: string): void {
+    this.assertActive();
+    if (this.internalMode !== "roaming") throw new Error("cannot start a decision outside roaming");
+    if (!this.currentNode().live_decisions.includes(decisionId)) throw new Error(`decision "${decisionId}" is not live here`);
+    if (!this.isDecisionUnlocked(decisionId)) throw new Error(`decision "${decisionId}" is locked`);
+    this.internalMode = "decision";
+  }
+
+  cancelDecision(): void {
+    this.assertActive();
+    if (this.internalMode !== "decision") throw new Error("no decision in progress");
+    this.internalMode = "roaming";
   }
 
   // --- actions ---
@@ -121,6 +241,7 @@ export class GameSession {
   // --- decisions + terminal ---
   chooseOption(decisionId: string, optionId: string, reasoning: string): { endedAt: "node" | "ending" } {
     this.assertActive();
+    if (this.internalMode !== "decision") throw new Error("no decision in progress");
     const node = this.currentNode();
     if (!node.live_decisions.includes(decisionId)) throw new Error(`decision "${decisionId}" is not live here`);
     if (!this.isDecisionUnlocked(decisionId)) throw new Error(`decision "${decisionId}" is locked`);
@@ -134,6 +255,9 @@ export class GameSession {
     }
     this.currentNodeId = option.leads_to;
     this.locationId = this.currentNode().accessible_locations[0];
+    this.internalMode = "roaming";
+    this.visited.clear();
+    this.decisionPrompted = false;
     return { endedAt: "node" };
   }
 
