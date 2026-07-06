@@ -190,6 +190,41 @@ function checkGraph(world: World): Issue[] {
   return issues;
 }
 
+function checkFactSolvability(world: World): Issue[] {
+  const issues: Issue[] = [];
+  const { nodeIds, edges } = buildNodeGraph(world);
+  const start = world.meta.start_node_id;
+  if (!nodeIds.has(start)) return issues; // start_missing reported elsewhere
+
+  const decisionById = new Map(world.decisions.map((d) => [d.id, d]));
+  const providers = new Map<string, Set<string>>();
+  for (const n of world.nodes) for (const fid of n.available_facts) {
+    if (!providers.has(fid)) providers.set(fid, new Set());
+    providers.get(fid)!.add(n.id);
+  }
+
+  for (const n of world.nodes) {
+    for (const did of n.live_decisions) {
+      const d = decisionById.get(did);
+      if (!d) continue;
+      for (const fid of d.requires_facts) {
+        const provs = providers.get(fid) ?? new Set<string>();
+        if (provs.has(n.id)) continue; // available at the decision's own node
+        // If n is still reachable with all provider nodes removed, some path avoids the fact.
+        const reachedAvoiding = reachableFrom(start, edges, provs);
+        if (reachedAvoiding.has(n.id)) {
+          issues.push({
+            code: "fact_unsolvable",
+            message: `decision "${d.id}" in node "${n.id}" requires fact "${fid}", but that fact is not guaranteed discoverable on every path to "${n.id}" — a player could reach the decision without it.`,
+            path: `nodes.${n.id}.live_decisions`,
+          });
+        }
+      }
+    }
+  }
+  return issues;
+}
+
 export function validateWorld(input: unknown): ValidationResult {
   const parsed = WorldSchema.safeParse(input);
   if (!parsed.success) {
@@ -203,6 +238,7 @@ export function validateWorld(input: unknown): ValidationResult {
     ...checkFactSources(world),
     ...checkStartAndEndings(world),
     ...checkGraph(world),
+    ...checkFactSolvability(world),
   ];
   const warnings: Issue[] = [];
   return { ok: errors.length === 0, errors, warnings };
