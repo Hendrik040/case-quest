@@ -225,6 +225,35 @@ function checkFactSolvability(world: World): Issue[] {
   return issues;
 }
 
+function checkWarnings(world: World): Issue[] {
+  const issues: Issue[] = [];
+
+  const illuminated = new Set<string>();
+  for (const d of world.decisions) for (const o of d.options) for (const lo of o.illuminates) illuminated.add(lo);
+  for (const e of world.endings) for (const o of e.lo_outcomes) illuminated.add(o.lo_id);
+  for (const o of world.learning_objectives) {
+    if (!illuminated.has(o.id)) issues.push({ code: "objective_unused", message: `learning objective "${o.id}" is not illuminated by any option or ending.`, path: `learning_objectives.${o.id}` });
+  }
+
+  const requiredFacts = new Set<string>();
+  for (const d of world.decisions) for (const fid of d.requires_facts) requiredFacts.add(fid);
+  for (const f of world.facts) {
+    if (!requiredFacts.has(f.id)) issues.push({ code: "fact_unused", message: `fact "${f.id}" is required by no decision.`, path: `facts.${f.id}` });
+  }
+
+  const actorById = new Map(world.actors.map((a) => [a.id, a]));
+  for (const n of world.nodes) {
+    const avail = new Set(n.available_facts);
+    for (const aid of n.present_actors) {
+      const a = actorById.get(aid);
+      if (!a) continue;
+      const revealsSomething = a.knowledge.some((fid) => avail.has(fid));
+      if (!revealsSomething) issues.push({ code: "actor_reveals_nothing", message: `actor "${aid}" is present in node "${n.id}" but can reveal none of its available_facts.`, path: `nodes.${n.id}.present_actors` });
+    }
+  }
+  return issues;
+}
+
 export function validateWorld(input: unknown): ValidationResult {
   const parsed = WorldSchema.safeParse(input);
   if (!parsed.success) {
@@ -240,6 +269,6 @@ export function validateWorld(input: unknown): ValidationResult {
     ...checkGraph(world),
     ...checkFactSolvability(world),
   ];
-  const warnings: Issue[] = [];
+  const warnings: Issue[] = [...checkWarnings(world)];
   return { ok: errors.length === 0, errors, warnings };
 }
