@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { WorldSchema, LOCATION_TYPES } from "./schema";
 import type { World } from "./types";
+import { buildNodeGraph, reachableFrom } from "./graph";
 
 export type IssueCode =
   | "shape_invalid"
@@ -150,6 +151,45 @@ function checkStartAndEndings(world: World): Issue[] {
   return issues;
 }
 
+function checkGraph(world: World): Issue[] {
+  const issues: Issue[] = [];
+  const { nodeIds, endingIds, edges } = buildNodeGraph(world);
+
+  for (const n of world.nodes) {
+    const outs = edges.get(n.id) ?? [];
+    if (outs.length === 0) issues.push({ code: "dead_end_node", message: `node "${n.id}" has no live decision leading onward (dead end).`, path: `nodes.${n.id}` });
+  }
+
+  if (nodeIds.has(world.meta.start_node_id)) {
+    const reached = reachableFrom(world.meta.start_node_id, edges);
+    for (const id of [...nodeIds, ...endingIds]) {
+      if (!reached.has(id)) issues.push({ code: "unreachable_node", message: `node/ending "${id}" is not reachable from start "${world.meta.start_node_id}".`, path: "nodes" });
+    }
+  }
+
+  const WHITE = 0, GREY = 1, BLACK = 2;
+  const color = new Map<string, number>();
+  for (const id of nodeIds) color.set(id, WHITE);
+  const dfs = (id: string): boolean => {
+    color.set(id, GREY);
+    for (const next of edges.get(id) ?? []) {
+      if (!nodeIds.has(next)) continue; // endings are sinks
+      const c = color.get(next);
+      if (c === GREY) return true;
+      if (c === WHITE && dfs(next)) return true;
+    }
+    color.set(id, BLACK);
+    return false;
+  };
+  for (const id of nodeIds) {
+    if (color.get(id) === WHITE && dfs(id)) {
+      issues.push({ code: "graph_cyclic", message: `The story node graph contains a cycle (beats must move forward).`, path: "nodes" });
+      break;
+    }
+  }
+  return issues;
+}
+
 export function validateWorld(input: unknown): ValidationResult {
   const parsed = WorldSchema.safeParse(input);
   if (!parsed.success) {
@@ -162,6 +202,7 @@ export function validateWorld(input: unknown): ValidationResult {
     ...checkProtagonist(world),
     ...checkFactSources(world),
     ...checkStartAndEndings(world),
+    ...checkGraph(world),
   ];
   const warnings: Issue[] = [];
   return { ok: errors.length === 0, errors, warnings };
