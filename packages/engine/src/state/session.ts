@@ -73,7 +73,12 @@ export class GameSession {
   }
 
   // --- actions ---
+  private assertActive(): void {
+    if (this.endingId !== null) throw new Error("the game has ended");
+  }
+
   moveTo(locationId: string): void {
+    this.assertActive();
     const node = this.currentNode();
     const current = this.locationsById.get(this.locationId)!;
     const accessible = node.accessible_locations.includes(locationId);
@@ -85,6 +90,7 @@ export class GameSession {
   }
 
   gatherFactsFromActor(actorId: string): { greeting?: string; revealed: { factId: string; line: string }[] } {
+    this.assertActive();
     const actor = this.actorsById.get(actorId);
     if (!actor) throw new Error(`unknown actor ${actorId}`);
     const available = new Set(this.currentNode().available_facts);
@@ -101,6 +107,7 @@ export class GameSession {
   }
 
   gatherFactFromLocation(factId: string): void {
+    this.assertActive();
     const fact = this.worldRef.facts.find((f) => f.id === factId);
     if (!fact) throw new Error(`unknown fact ${factId}`);
     const availableHere = this.currentNode().available_facts.includes(factId);
@@ -113,6 +120,7 @@ export class GameSession {
 
   // --- decisions + terminal ---
   chooseOption(decisionId: string, optionId: string, reasoning: string): { endedAt: "node" | "ending" } {
+    this.assertActive();
     const node = this.currentNode();
     if (!node.live_decisions.includes(decisionId)) throw new Error(`decision "${decisionId}" is not live here`);
     if (!this.isDecisionUnlocked(decisionId)) throw new Error(`decision "${decisionId}" is locked`);

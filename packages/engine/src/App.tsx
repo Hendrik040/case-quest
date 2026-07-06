@@ -25,8 +25,13 @@ export function App() {
 
   useEffect(() => {
     let game: import("phaser").Game | undefined;
+    // Guards the async boot against StrictMode's mount→unmount→mount: without
+    // it the first mount's game is created after its cleanup already ran,
+    // leaving a zombie Phaser instance that swallows keyboard input.
+    let cancelled = false;
     (async () => {
       const raw = await (await fetch(WORLD_URL)).json();
+      if (cancelled) return;
       const result = validateWorld(raw);
       if (!result.ok) { setErrors(result.errors.map((e) => `[${e.code}] ${e.message}`)); return; }
       const world: World = WorldSchema.parse(raw);
@@ -34,6 +39,7 @@ export function App() {
       const bus = new EventBus();
       sessionRef.current = session;
       busRef.current = bus;
+      if (import.meta.env.DEV) (window as unknown as { __cqBus?: EventBus }).__cqBus = bus;
 
       const refreshHud = () => {
         const o = session.objective();
@@ -53,9 +59,9 @@ export function App() {
       });
       bus.on("location:changed", () => refreshHud());
 
-      if (parentRef.current) game = createGame(parentRef.current, session, bus);
+      if (!cancelled && parentRef.current) game = createGame(parentRef.current, session, bus);
     })();
-    return () => { game?.destroy(true); };
+    return () => { cancelled = true; game?.destroy(true); };
   }, []);
 
   const activateDecision = () => {

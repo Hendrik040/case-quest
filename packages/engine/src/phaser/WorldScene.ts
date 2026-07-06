@@ -34,6 +34,12 @@ export class WorldScene extends Phaser.Scene {
     this.walls = this.physics.add.staticGroup();
     this.renderLocation();
     this.bus.on("scene:render", () => this.renderLocation());
+    if (import.meta.env.DEV) (window as unknown as { __cqScene?: WorldScene }).__cqScene = this;
+  }
+
+  /** Dev/test helper: the player's current world position. */
+  getPlayerPos(): { x: number; y: number } | null {
+    return this.player ? { x: this.player.x, y: this.player.y } : null;
   }
 
   private clear() {
@@ -102,6 +108,7 @@ export class WorldScene extends Phaser.Scene {
     if (!this.player) {
       this.player = this.physics.add.sprite(sx, sy, "sprite-player");
       this.player.setCollideWorldBounds(true);
+      this.player.setDepth(10); // keep the player above tiles re-drawn on room change
       this.cameras.main.startFollow(this.player);
     } else {
       this.player.setPosition(sx, sy);
@@ -119,26 +126,19 @@ export class WorldScene extends Phaser.Scene {
     if (this.cursors.up.isDown) this.player.setVelocityY(-SPEED);
     else if (this.cursors.down.isDown) this.player.setVelocityY(SPEED);
 
-    const near = this.nearestInteractable();
-    if (near && near.kind === "door") {
-      this.session.moveTo(near.id);
-      this.bus.emit("scene:render", {});
-      return;
+    // On the interact key, doors take priority over a co-located fact/NPC so an
+    // exit can never be shadowed by an overlapping pickup; otherwise use the
+    // nearest actor/fact. Doors require the key press (no accidental warping).
+    if (Phaser.Input.Keyboard.JustDown(this.interactKey)) {
+      const inRange = this.interactables
+        .map((it) => ({ it, d: Phaser.Math.Distance.Between(this.player!.x, this.player!.y, it.x, it.y) }))
+        .filter((o) => o.d < INTERACT_RADIUS)
+        .sort((a, b) => a.d - b.d);
+      const door = inRange.find((o) => o.it.kind === "door");
+      const target = door ? door.it : inRange[0]?.it;
+      if (target?.kind === "actor") this.bus.emit("interact:actor", { actorId: target.id });
+      else if (target?.kind === "fact") this.bus.emit("interact:fact", { factId: target.id });
+      else if (target?.kind === "door") { this.session.moveTo(target.id); this.bus.emit("scene:render", {}); }
     }
-    if (near && Phaser.Input.Keyboard.JustDown(this.interactKey)) {
-      if (near.kind === "actor") this.bus.emit("interact:actor", { actorId: near.id });
-      else if (near.kind === "fact") this.bus.emit("interact:fact", { factId: near.id });
-    }
-  }
-
-  private nearestInteractable(): Interactable | null {
-    if (!this.player) return null;
-    let best: Interactable | null = null;
-    let bestD = INTERACT_RADIUS;
-    for (const it of this.interactables) {
-      const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, it.x, it.y);
-      if (d < bestD) { bestD = d; best = it; }
-    }
-    return best;
   }
 }

@@ -108,4 +108,12 @@ describe("GameSession — decisions + debrief", () => {
   it("debrief is null before an ending", () => {
     expect(newSession().debrief()).toBeNull();
   });
+  it("rejects mutations after the game has ended", () => {
+    const s = newSession();
+    gatherAll(s);
+    s.chooseOption("decide_contract", "accept", "go");
+    expect(() => s.moveTo("roastery_floor")).toThrow();
+    expect(() => s.gatherFactsFromActor("roaster")).toThrow();
+    expect(() => s.chooseOption("decide_contract", "decline", "again")).toThrow();
+  });
 });
