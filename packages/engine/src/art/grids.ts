@@ -128,6 +128,32 @@ export function tileGrid(kind: "floor" | "wall" | "door" | "desk"): PixelGrid {
   return { w: 16, h: 16, palette: TILE_PALETTES[kind], rows: toRows(TILE_SHAPES[kind]()) };
 }
 
+// ---- fact pickup (16x16) ---------------------------------------------------
+// A Pokéball-like ground item for investigation spots: red top hemisphere,
+// white bottom, dark 1px outline (via addOutline), single white specular
+// pixel. Distinct silhouette from the floor/wall/door/desk tiles so it reads
+// as a "grab this" prop rather than terrain.
+
+const FACT_PALETTE = ["#1a1414", "#d94030", "#f0f0f0", "#ffffff"];
+
+function factOrbShape(): Canvas {
+  const c = blank(16, 16);
+  const cx = 7.5, cy = 7.5, r = 6.5;
+  for (let y = 0; y < 16; y++) {
+    for (let x = 0; x < 16; x++) {
+      const dx = x - cx, dy = y - cy;
+      if (dx * dx + dy * dy <= r * r) px(c, x, y, y < cy ? "1" : "2");
+    }
+  }
+  px(c, 5, 4, "3"); // specular highlight, top-left of the red hemisphere
+  addOutline(c, "0");
+  return c;
+}
+
+export function factGrid(): PixelGrid {
+  return { w: 16, h: 16, palette: FACT_PALETTE, rows: toRows(factOrbShape()) };
+}
+
 // ---- chibi characters (16x24) ---------------------------------------------
 // Shared palette slots for both "player" and "npc": 0 outline, 1 skin,
 // 2 hair, 3 shirt, 4 shirt shade, 5 pants/shoes.

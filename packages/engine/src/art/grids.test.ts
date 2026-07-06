@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { tileGrid, charGrid, bigGrid, NPC_PALETTES } from "./grids";
+import { tileGrid, charGrid, bigGrid, factGrid, NPC_PALETTES } from "./grids";
 
 const kinds = ["floor", "wall", "door", "desk"] as const;
 
@@ -11,6 +11,12 @@ describe("pixel grids", () => {
       expect(g.rows).toHaveLength(16);
       for (const r of g.rows) expect(r).toHaveLength(16);
     }
+  });
+  it("fact orb is 16x16 with consistent row widths", () => {
+    const g = factGrid();
+    expect(g.w).toBe(16); expect(g.h).toBe(16);
+    expect(g.rows).toHaveLength(16);
+    for (const r of g.rows) expect(r).toHaveLength(16);
   });
   it("char sprites are 16x24 and use only palette indices or transparency", () => {
     const g = charGrid("player", 0);

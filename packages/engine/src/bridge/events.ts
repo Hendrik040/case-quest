@@ -4,6 +4,7 @@ export interface EnginePayloads {
   "decision:activate": { decisionId: string };
   "location:changed": { locationId: string };
   "scene:render": Record<string, never>;
+  "world:freeze": { frozen: boolean };
 }
 export type EngineEvent = keyof EnginePayloads;
 type Handler<E extends EngineEvent> = (payload: EnginePayloads[E]) => void;

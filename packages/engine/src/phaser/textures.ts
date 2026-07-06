@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { tileGrid, charGrid, NPC_PALETTES } from "../art/grids";
+import { tileGrid, charGrid, factGrid, NPC_PALETTES } from "../art/grids";
 import { gridToCanvas } from "../art/canvas";
 
 // Registers a rasterized PixelGrid as a Phaser canvas texture, skipping any
@@ -15,6 +15,7 @@ export function generatePlaceholderTextures(scene: Phaser.Scene): void {
   addOnce(scene, "tile-wall", gridToCanvas(tileGrid("wall")));
   addOnce(scene, "tile-door", gridToCanvas(tileGrid("door")));
   addOnce(scene, "tile-desk", gridToCanvas(tileGrid("desk")));
+  addOnce(scene, "sprite-fact", gridToCanvas(factGrid()));
   addOnce(scene, "sprite-player", gridToCanvas(charGrid("player", 0)));
   NPC_PALETTES.forEach((_, i) => addOnce(scene, `sprite-npc-${i}`, gridToCanvas(charGrid("npc", i))));
 }

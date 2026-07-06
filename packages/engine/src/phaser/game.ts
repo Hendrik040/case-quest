@@ -15,12 +15,6 @@ export function createGame(parent: HTMLElement, session: GameSession, bus: Event
     backgroundColor: "#a0d8d0",
     pixelArt: true,
     roundPixels: true,
-    // NOTE (concern, do not remove yet): WorldScene.ts still drives movement
-    // and collision through this.physics (physics.add.staticGroup/sprite/
-    // collider, physics.world.setBounds). Task 5 rewrites WorldScene to
-    // grid-tweened movement and drops arcade physics entirely — only then
-    // should this config be deleted.
-    physics: { default: "arcade", arcade: { gravity: { x: 0, y: 0 }, debug: false } },
     scale: { mode: Phaser.Scale.NONE, zoom: zoom() },
     scene: [WorldScene],
   });
