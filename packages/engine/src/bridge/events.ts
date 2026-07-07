@@ -1,7 +1,6 @@
 export interface EnginePayloads {
   "interact:actor": { actorId: string };
   "interact:fact": { factId: string };
-  "decision:activate": { decisionId: string };
   "location:changed": { locationId: string };
   "scene:render": Record<string, never>;
   "world:freeze": { frozen: boolean };

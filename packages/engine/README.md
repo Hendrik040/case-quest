@@ -51,7 +51,10 @@ Entering an unvisited location with NPCs present auto-triggers its encounter
 chain (freeze + grayscale the world, sweep in a transition band, then the
 first agent's encounter screen); doors and fact pickups still require the
 interact key aimed at the facing tile, never mere proximity, so an exit or a
-`?` can't be triggered by walking past it. In dev builds the engine exposes
+`?` can't be triggered by walking past it. The auto-chain is best-effort: it
+fires after a ~1.2s entry window, and if you start another interaction during
+that window it yields — every agent stays reachable regardless by walking up
+and pressing Space. In dev builds the engine exposes
 `window.__cqScene`, `window.__cqSession`, and `window.__cqBus` for automated
 verification (stripped from production builds via `import.meta.env.DEV`).
 

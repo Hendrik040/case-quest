@@ -206,3 +206,94 @@ describe("GameSession — encounter machine", () => {
     expect(() => s.chooseOption("decide_contract", "decline", "r")).toThrow(/decision/);
   });
 });
+
+describe("GameSession — multi-node decision path", () => {
+  // Hand-built minimal two-node world (not the toy world.json) to exercise the
+  // endedAt:"node" branch of chooseOption: node A's only decision leads to
+  // node B (another StoryNode), not straight to an ending.
+  function twoNodeWorld(): World {
+    return WorldSchema.parse({
+      schema_version: "0.1",
+      meta: {
+        case_id: "multi-node-test",
+        title: "Multi-Node Test World",
+        synopsis: "A minimal two-node world for exercising the endedAt:\"node\" transition.",
+        protagonist_actor_id: "player",
+        start_node_id: "node_a",
+      },
+      learning_objectives: [],
+      actors: [
+        {
+          id: "player", name: "Player", role: "protagonist", is_playable: true,
+          persona: { background: "", personality: "", communication_style: "" },
+          goals: [], knowledge: [],
+        },
+        {
+          id: "npc_a", name: "Ann", role: "npc", is_playable: false,
+          persona: { background: "", personality: "", communication_style: "" },
+          goals: [], knowledge: ["fact_a"],
+          dialogue: { greeting: "Hi from A", topics: [{ fact_id: "fact_a", line: "Fact A revealed." }] },
+        },
+        {
+          id: "npc_b", name: "Ben", role: "npc", is_playable: false,
+          persona: { background: "", personality: "", communication_style: "" },
+          goals: [], knowledge: ["fact_b"],
+          dialogue: { greeting: "Hi from B", topics: [{ fact_id: "fact_b", line: "Fact B revealed." }] },
+        },
+      ],
+      locations: [
+        { id: "loc_a", name: "Location A", type: "office", exits: [] },
+        { id: "loc_b", name: "Location B", type: "office", exits: [] },
+      ],
+      facts: [
+        { id: "fact_a", label: "Fact A", content: "content a", sources: [{ actor_id: "npc_a", location_id: "loc_a" }] },
+        { id: "fact_b", label: "Fact B", content: "content b", sources: [{ actor_id: "npc_b", location_id: "loc_b" }] },
+      ],
+      decisions: [
+        {
+          id: "decide_a", prompt: "Move to node B?", requires_facts: ["fact_a"],
+          options: [{ id: "go_b", label: "Go to node B", consequence_text: "You head to node B.", illuminates: [], leads_to: "node_b" }],
+        },
+        {
+          id: "decide_b", prompt: "Finish?", requires_facts: ["fact_b"],
+          options: [{ id: "finish", label: "Finish", consequence_text: "You finish.", illuminates: [], leads_to: "end_final" }],
+        },
+      ],
+      nodes: [
+        { id: "node_a", title: "Node A", accessible_locations: ["loc_a"], present_actors: ["npc_a"], available_facts: ["fact_a"], live_decisions: ["decide_a"] },
+        { id: "node_b", title: "Node B", accessible_locations: ["loc_b"], present_actors: ["npc_b"], available_facts: ["fact_b"], live_decisions: ["decide_b"] },
+      ],
+      endings: [
+        { id: "end_final", title: "The End", summary: "You reached the end.", real_case_comparison: "n/a", lo_outcomes: [] },
+      ],
+    });
+  }
+
+  it("leads_to another node: relocates, resets roaming/visited/decisionPrompted, and the new node re-arms", () => {
+    const s = new GameSession(twoNodeWorld());
+
+    const view = s.maybeStartChain();
+    expect(view?.actorId).toBe("npc_a");
+    s.encounterAsk("fact_a");
+    s.encounterMoveOn();
+    expect(s.pollDecisionPrompt()).toBe(true);
+
+    s.startDecision("decide_a");
+    const r = s.chooseOption("decide_a", "go_b", "moving on");
+
+    expect(r.endedAt).toBe("node");
+    expect(s.mode()).toBe("roaming");
+    expect(s.currentNode().id).toBe("node_b");
+    expect(s.currentLocationId()).toBe("loc_b"); // node B's first accessible location
+
+    // visited was cleared, so node B's own room auto-chain can arm again
+    const nextView = s.maybeStartChain();
+    expect(nextView).not.toBeNull();
+    expect(nextView?.actorId).toBe("npc_b");
+
+    // decisionPrompted was reset, so the next node's decision can prompt again
+    s.encounterAsk("fact_b");
+    s.encounterMoveOn();
+    expect(s.pollDecisionPrompt()).toBe(true);
+  });
+});
