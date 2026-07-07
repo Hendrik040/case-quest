@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from "react";
+import { useState, useRef, type KeyboardEvent } from "react";
 
 /**
  * Field-skin panel (white fill, teal border — the kit's "field" palette)
@@ -16,17 +16,21 @@ export function ReasoningPanel({ onSubmit }: { onSubmit: (reasoning: string) => 
   const [text, setText] = useState("");
   const trimmed = text.trim();
   const canSubmit = trimmed.length > 0;
+  const submittedRef = useRef(false);
 
   const submit = () => {
     if (!canSubmit) return;
+    if (submittedRef.current) return;
+    submittedRef.current = true;
     onSubmit(trimmed);
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     e.stopPropagation();
+    if (e.repeat) return;
     if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
       submit();
+      e.preventDefault();
     }
   };
 
@@ -47,7 +51,7 @@ export function ReasoningPanel({ onSubmit }: { onSubmit: (reasoning: string) => 
         type="button"
         className="cq-reasoning-submit"
         data-testid="reasoning-submit"
-        disabled={!canSubmit}
+        disabled={!canSubmit || submittedRef.current}
         onClick={submit}
       >
         COMMIT
