@@ -147,6 +147,18 @@ export function App() {
     busRef.current?.emit("world:freeze", { frozen: overlay.kind !== "none" });
   }, [overlay.kind]);
 
+  // Seam fix (Task 11 playthrough): `LocationBanner` dismisses itself on its
+  // own 2500ms timer, independent of the chain-check at 1200ms — so on any
+  // location whose first visit auto-triggers an encounter (both rooms in the
+  // toy world do), the banner (z-index 30, higher than everything in
+  // `.cq-encounter`) was still mounted and visually on top of the transition
+  // band/encounter screen for the ~400ms tail of its own timer. Once another
+  // overlay takes the screen, the "you've arrived" banner has done its job —
+  // drop it immediately instead of waiting out its timer.
+  useEffect(() => {
+    if (overlay.kind !== "none") setBannerTitle(null);
+  }, [overlay.kind]);
+
   // Rule 7: global Enter shortcut — only while roaming with no overlay up
   // and the first live decision already unlocked.
   useEffect(() => {

@@ -64,6 +64,21 @@ export class WorldScene extends Phaser.Scene {
     generatePlaceholderTextures(this);
     this.cursors = this.input.keyboard!.createCursorKeys();
     this.interactKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+    // Seam fix (Task 11 playthrough): both calls above default to
+    // `enableCapture: true`, which makes Phaser's *own* `window` keydown
+    // listener (registered here, at scene boot — always before any of the
+    // pixel kit's `window` keydown listeners, which only attach once an
+    // overlay mounts) call `event.preventDefault()` on every Space/Arrow
+    // press, unconditionally, regardless of `frozen`. Every kit component
+    // (Typewriter, ChoiceBox, ActionMenu, TopicsPanel, NotesPanel,
+    // DecisionEncounter's Escape handler, App's Enter shortcut) guards on
+    // `if (e.defaultPrevented) return;`, so with captures left on, every one
+    // of those `defaultPrevented` before it ever reached the UI: the entire
+    // keyboard-driven overlay UI was inert. WorldScene reads key state by
+    // polling (`isDown` / `JustDown`) every frame, which capture status
+    // never affected either way — so dropping the captures costs this scene
+    // nothing while unblocking every overlay above it.
+    this.input.keyboard!.clearCaptures();
     this.renderLocation();
     this.bus.on("scene:render", () => this.renderLocation());
     this.bus.on("world:freeze", ({ frozen }) => {
@@ -89,6 +104,28 @@ export class WorldScene extends Phaser.Scene {
     return this.player ? { tx: this.tx, ty: this.ty } : null;
   }
 
+  /** Dev/test helper: the current room's interactables (NPCs, fact orbs, doors), by tile. */
+  getInteractables(): Interactable[] {
+    return this.interactables.map((it) => ({ ...it }));
+  }
+
+  /**
+   * Dev/test helper: a blocked/walkable snapshot of the current room, sized
+   * to the active template — lets an external driver (e.g. the e2e script)
+   * do its own pathfinding without hardcoding template geometry.
+   */
+  getRoomGrid(): { width: number; height: number; blocked: boolean[][] } | null {
+    if (!this.tpl) return null;
+    const { width, height } = this.tpl;
+    const blocked: boolean[][] = [];
+    for (let y = 0; y < height; y++) {
+      const row: boolean[] = [];
+      for (let x = 0; x < width; x++) row.push(this.isBlocked(x, y));
+      blocked.push(row);
+    }
+    return { width, height, blocked };
+  }
+
   private clear() {
     this.rendered.forEach((o) => o.destroy());
     this.rendered = [];
@@ -100,6 +137,14 @@ export class WorldScene extends Phaser.Scene {
     const loc = this.session.accessibleLocations().find((l) => l.id === this.session.currentLocationId())!;
     const tpl = getTemplate(loc.type);
     this.tpl = tpl;
+    // Seam fix (Task 11 playthrough): the camera follows the player with no
+    // bounds, and every room template (240x176 logical px) is taller than
+    // the 240x160 canvas — so centering on the player at their (7,8) spawn,
+    // just two tiles off the south wall, immediately scrolls ~44px of raw
+    // `backgroundColor` "void" into view below the map. Clamping to the
+    // room's own pixel rect keeps the camera from ever scrolling past an
+    // edge, in either room.
+    this.cameras.main.setBounds(0, 0, tpl.width * TILE_SIZE, tpl.height * TILE_SIZE);
     const tileKey = (t: number) =>
       t === TILE.WALL ? "tile-wall" : t === TILE.DOOR ? "tile-door" : t === TILE.DESK ? "tile-desk" : "tile-floor";
 

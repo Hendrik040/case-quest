@@ -6,7 +6,13 @@
     <link rel="icon" href="data:," />
     <title>Case Quest</title>
     <style>
-      html, body, #root { margin: 0; height: 100%; background: #10131a; color: #e6e6e6; font-family: system-ui, sans-serif; }
+      /* overflow: hidden is load-bearing, not cosmetic: WorldScene clears
+         Phaser's keyboard captures (see WorldScene.create) so the pixel UI's
+         own `window` keydown handlers actually receive Space/Arrow presses
+         instead of finding them already `defaultPrevented`. That trades
+         away the browser's default scroll-on-Space/Arrow behavior, which
+         this rule suppresses at the CSS level instead. */
+      html, body, #root { margin: 0; height: 100%; overflow: hidden; background: #10131a; color: #e6e6e6; font-family: system-ui, sans-serif; }
     </style>
   </head>
   <body>
