@@ -16,12 +16,24 @@ export type ChoiceOption = { id: string; label: string; disabled?: boolean };
  * `TopicsPanel` can reuse this same hook instead of layering a second
  * listener on top of it. Callers still own rendering and mouse handling
  * (hover -> `setCursor`, click -> `onPick` directly).
+ *
+ * An optional `columns` (default 1) switches Up/Down to a true row-major
+ * grid stride: Left/Right always step the flat index by ±1, but Up/Down
+ * step by ±`columns` so they move a full row (Gen 3's move-grid behavior)
+ * instead of behaving like Left/Right. In grid mode, a step that lands on a
+ * disabled option keeps stepping by the same stride until it finds an
+ * enabled option or runs out of range, in which case the cursor stays put
+ * (no wrap-around in grid mode). `columns === 1` (the `ChoiceBox`/
+ * `ActionMenu` default) keeps the original flat wrap-around behavior
+ * unchanged.
  */
 export function useCursor<T extends { id: string; disabled?: boolean }>(
   options: T[],
   onPick: (id: string) => void,
   onCancel?: () => void,
+  gridOptions?: { columns?: number },
 ): { cursor: number; setCursor: (index: number) => void } {
+  const columns = gridOptions?.columns ?? 1;
   const enabledIndices = options.reduce<number[]>((acc, o, i) => {
     if (!o.disabled) acc.push(i);
     return acc;
@@ -39,8 +51,18 @@ export function useCursor<T extends { id: string; disabled?: boolean }>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [options]);
 
-  const moveCursor = (dir: 1 | -1) => {
+  const moveCursor = (dir: 1 | -1, axis: "row" | "col" = "col") => {
     if (enabledIndices.length === 0) return;
+    if (columns > 1) {
+      const step = axis === "row" ? dir * columns : dir;
+      let next = cursor + step;
+      while (next >= 0 && next < options.length && options[next]?.disabled) {
+        next += step;
+      }
+      if (next >= 0 && next < options.length) setCursor(next);
+      // else: stepped out of range — no wrap in grid mode, cursor stays put.
+      return;
+    }
     const pos = enabledIndices.indexOf(cursor);
     const nextPos = pos === -1 ? 0 : (pos + dir + enabledIndices.length) % enabledIndices.length;
     setCursor(enabledIndices[nextPos]);
@@ -55,15 +77,17 @@ export function useCursor<T extends { id: string; disabled?: boolean }>(
     const onKey = (e: KeyboardEvent) => {
       if (e.repeat) return;
       if (e.defaultPrevented) return;
-      if (e.key === "ArrowUp" || e.key === "ArrowLeft") { moveCursor(-1); e.preventDefault(); }
-      else if (e.key === "ArrowDown" || e.key === "ArrowRight") { moveCursor(1); e.preventDefault(); }
+      if (e.key === "ArrowLeft") { moveCursor(-1, "col"); e.preventDefault(); }
+      else if (e.key === "ArrowRight") { moveCursor(1, "col"); e.preventDefault(); }
+      else if (e.key === "ArrowUp") { moveCursor(-1, "row"); e.preventDefault(); }
+      else if (e.key === "ArrowDown") { moveCursor(1, "row"); e.preventDefault(); }
       else if (e.key === " " || e.key === "Enter") { pick(); e.preventDefault(); }
       else if (e.key === "Escape" && onCancel) { onCancel(); e.preventDefault(); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cursor, options, onCancel]);
+  }, [cursor, options, onCancel, columns]);
 
   return { cursor, setCursor };
 }

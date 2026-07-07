@@ -7,7 +7,9 @@ import type { EncounterTopic } from "../../state/session";
  * inert to keyboard/mouse) rather than removed, so the shape of the grid
  * stays stable as the player works through an actor's topics. Escape backs
  * out to the action menu via `onCancel`. Reuses `useCursor` (shared with
- * `ChoiceBox`/`ActionMenu`) for the triangle-cursor navigation.
+ * `ChoiceBox`/`ActionMenu`) for the triangle-cursor navigation, passing
+ * `{ columns: 2 }` so Up/Down move a full row (matching the 2-column CSS
+ * grid) instead of behaving like Left/Right.
  */
 export function TopicsPanel({ topics, onPick, onCancel }: {
   topics: EncounterTopic[];
@@ -15,7 +17,7 @@ export function TopicsPanel({ topics, onPick, onCancel }: {
   onCancel: () => void;
 }) {
   const options = topics.map((t) => ({ id: t.factId, label: t.label, disabled: t.asked }));
-  const { cursor, setCursor } = useCursor(options, onPick, onCancel);
+  const { cursor, setCursor } = useCursor(options, onPick, onCancel, { columns: 2 });
 
   return (
     <div className="cq-topics-panel" data-testid="topics-panel">
