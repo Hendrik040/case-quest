@@ -76,6 +76,14 @@ export function App() {
 
   const [overlay, setOverlay] = useState<Overlay>({ kind: "none" });
   const [bannerTitle, setBannerTitle] = useState<string | null>(null);
+  // Kept in sync with `overlay` on every render so the chain-check timer
+  // (below) can read the *live* overlay without closing over a stale value.
+  const overlayRef = useRef<Overlay>(overlay);
+  overlayRef.current = overlay;
+  // Handle for the pending chain-check timeout — so a fresh location can
+  // cancel a still-pending check from a previous one, and unmount can clear
+  // it outright.
+  const chainTimerRef = useRef<number | null>(null);
 
   // Rule 5: unlock check — after a return-to-roaming or a field-message
   // dismissal, see whether the first live decision just became reachable.
@@ -91,7 +99,13 @@ export function App() {
     const session = sessionRef.current;
     if (!session) return;
     setBannerTitle(currentLocationTitle(session));
-    window.setTimeout(() => {
+    if (chainTimerRef.current !== null) window.clearTimeout(chainTimerRef.current);
+    chainTimerRef.current = window.setTimeout(() => {
+      chainTimerRef.current = null;
+      // If some other overlay (e.g. a fact-orb fieldMsg) is already live,
+      // don't clobber it — the chain simply won't auto-trigger for this
+      // room entry; the player can still walk up to agents directly.
+      if (overlayRef.current.kind !== "none") return;
       const view = session.maybeStartChain();
       if (view) setOverlay({ kind: "transition", view });
     }, CHAIN_CHECK_DELAY_MS);
@@ -133,7 +147,11 @@ export function App() {
       if (!cancelled && parentRef.current) game = createGame(parentRef.current, session, bus);
       showLocationBanner();
     })();
-    return () => { cancelled = true; game?.destroy(true); };
+    return () => {
+      cancelled = true;
+      game?.destroy(true);
+      if (chainTimerRef.current !== null) window.clearTimeout(chainTimerRef.current);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -246,7 +264,7 @@ export function App() {
         <div ref={parentRef} style={{ position: "absolute", inset: 0 }} />
 
         {bannerTitle !== null && (
-          <LocationBanner title={bannerTitle} onDone={() => setBannerTitle(null)} />
+          <LocationBanner key={bannerTitle} title={bannerTitle} onDone={() => setBannerTitle(null)} />
         )}
 
         {session && overlay.kind === "transition" && (
