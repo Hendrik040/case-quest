@@ -68,10 +68,13 @@ export class WorldScene extends Phaser.Scene {
     this.bus.on("scene:render", () => this.renderLocation());
     this.bus.on("world:freeze", ({ frozen }) => {
       this.frozen = frozen;
-      // A press made just before a freeze begins shouldn't fire the instant
-      // the game thaws — only latched presses made *during* the freeze (or
-      // a move step) should survive it.
-      if (frozen) this.interactQueued = false;
+      // Clear the latch (and reset Phaser's own key state) on BOTH edges: a
+      // press queued right before we freeze must not fire once an overlay
+      // owns input, and — just as importantly — the Space/Enter press that
+      // *dismisses* an overlay and thaws the world must not replay here as
+      // a fresh world interact.
+      this.interactQueued = false;
+      this.interactKey.reset();
     });
     if (import.meta.env.DEV) (window as unknown as { __cqScene?: WorldScene }).__cqScene = this;
   }
@@ -114,7 +117,12 @@ export class WorldScene extends Phaser.Scene {
     placement.npcIds.forEach((actorId, i) => {
       const slot = tpl.poiSlots[i % tpl.poiSlots.length];
       const { x, y } = characterFoot(slot.x, slot.y);
-      this.rendered.push(this.add.sprite(x, y, `sprite-npc-${i % 4}`).setOrigin(0.5, 0.75));
+      // Palette index keyed by the actor's position in the node's
+      // `present_actors` list (not placement order): App uses the same
+      // formula for the transition band / encounter screen sprite, so a
+      // given actor keeps one color everywhere they appear.
+      const paletteIdx = node.present_actors.indexOf(actorId) % 4;
+      this.rendered.push(this.add.sprite(x, y, `sprite-npc-${paletteIdx}`).setOrigin(0.5, 0.75));
       this.interactables.push({ tx: slot.x, ty: slot.y, kind: "actor", id: actorId });
     });
 
