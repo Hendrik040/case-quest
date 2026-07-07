@@ -12,6 +12,20 @@ type Phase = "intro" | "menu" | "topics" | "revealing" | "notes";
 export interface EncounterFacts { got: number; needed: number; labels: string[]; }
 
 /**
+ * Shared diorama backdrop — the enemy + player platforms — reused by both
+ * this screen and `DecisionEncounter` (the "boss fight" against a decision
+ * has no agent/player sprites of its own, but sits on the same platforms).
+ */
+export function EncounterDiorama() {
+  return (
+    <>
+      <div className="cq-platform cq-enemy-platform" />
+      <div className="cq-platform cq-player-platform" />
+    </>
+  );
+}
+
+/**
  * Pokemon-Emerald-style encounter diorama: enemy platform + agent sprite
  * (top), player platform + back sprite (bottom-left), info panels, and a
  * bottom UI band that cycles through the phase machine:
@@ -64,8 +78,7 @@ export function EncounterScreen({
 
   return (
     <div className="cq-encounter" data-testid="encounter">
-      <div className="cq-platform cq-enemy-platform" />
-      <div className="cq-platform cq-player-platform" />
+      <EncounterDiorama />
 
       <img
         key={`agent-sprite-${view.actorId}`}

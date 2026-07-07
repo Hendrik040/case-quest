@@ -569,3 +569,103 @@ img.cq-sprite {
 .cq-notes-empty {
   opacity: 0.7;
 }
+
+/* ---------------------------------------------------------------------- */
+/* ReasoningPanel (Task 9)                                                 */
+/* ---------------------------------------------------------------------- */
+
+.cq-reasoning-panel {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--px) * 4);
+  transform: translateX(-50%);
+  width: calc(var(--px) * 232);
+  box-sizing: border-box;
+  padding: calc(var(--px) * 4) calc(var(--px) * 6);
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 3);
+  background: var(--cq-field-box-fill);
+  border: calc(var(--px) * 2) solid var(--cq-field-box-border-outer);
+  box-shadow: inset 0 0 0 calc(var(--px) * 1) var(--cq-field-box-border-inner);
+  border-radius: calc(var(--px) * 4);
+  color: var(--cq-field-text);
+  font-family: var(--cq-font);
+  z-index: 30;
+}
+
+.cq-reasoning-title {
+  font-size: calc(var(--px) * 6);
+}
+
+.cq-reasoning-textarea {
+  box-sizing: border-box;
+  width: 100%;
+  resize: none;
+  background: #ffffff;
+  border: calc(var(--px) * 1) solid var(--cq-field-box-border-outer);
+  border-radius: calc(var(--px) * 2);
+  padding: calc(var(--px) * 2) calc(var(--px) * 3);
+  font-family: var(--cq-font);
+  font-size: calc(var(--px) * 5);
+  line-height: calc(var(--px) * 8);
+  color: var(--cq-field-text);
+}
+
+.cq-reasoning-submit {
+  align-self: flex-end;
+  box-sizing: border-box;
+  padding: calc(var(--px) * 2) calc(var(--px) * 5);
+  background: var(--cq-field-box-border-outer);
+  border: none;
+  border-radius: calc(var(--px) * 2);
+  font-family: var(--cq-font);
+  font-size: calc(var(--px) * 5);
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.cq-reasoning-submit:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ---------------------------------------------------------------------- */
+/* DebriefPages (Task 9)                                                   */
+/* ---------------------------------------------------------------------- */
+
+.cq-debrief {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: var(--cq-battle-box-fill);
+  font-family: var(--cq-font);
+}
+
+.cq-debrief-final {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: calc(var(--px) * 200);
+  box-sizing: border-box;
+  padding: calc(var(--px) * 8) calc(var(--px) * 10);
+  background: var(--cq-field-box-fill);
+  border: calc(var(--px) * 2) solid var(--cq-field-box-border-outer);
+  box-shadow: inset 0 0 0 calc(var(--px) * 1) var(--cq-field-box-border-inner);
+  border-radius: calc(var(--px) * 4);
+  color: var(--cq-field-text);
+  font-family: var(--cq-font);
+  text-align: center;
+  z-index: 20;
+}
+
+.cq-debrief-final-title {
+  font-size: calc(var(--px) * 6);
+  margin-bottom: calc(var(--px) * 6);
+}
+
+.cq-debrief-final-tag {
+  font-size: calc(var(--px) * 8);
+  letter-spacing: calc(var(--px) * 1);
+}
