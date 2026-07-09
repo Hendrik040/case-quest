@@ -17,6 +17,18 @@ import { bigGrid } from "./art/grids";
 
 const WORLD_URL = "/worlds/wholesale-offer.world.json";
 
+// Host-page callbacks for library embeds (see src/lib.ts). Defined here (not
+// lib.ts) so App can type its props without importing its own consumer.
+export interface CaseQuestCallbacks {
+  onDebriefComplete?: (summary: { endingId: string; factsGathered: number; choices: string[] }) => void;
+}
+
+export interface AppProps {
+  /** Pre-validated world injected by mountCaseQuest; when absent, App fetches WORLD_URL (standalone dev). */
+  world?: World;
+  callbacks?: CaseQuestCallbacks;
+}
+
 // How long the field hint sits before we check whether the chain that just
 // wrapped up unlocked a decision (the banner itself keeps animating for the
 // full 2500ms independently — see `LocationBanner`).
@@ -68,7 +80,7 @@ function computeEncounterFacts(session: GameSession): EncounterFacts {
   return { got: objective.got, needed: objective.needed, labels };
 }
 
-export function App() {
+export function App({ world: injectedWorld, callbacks }: AppProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const [errors, setErrors] = useState<string[] | null>(null);
   const sessionRef = useRef<GameSession | null>(null);
@@ -118,11 +130,17 @@ export function App() {
     // leaving a zombie Phaser instance that swallows keyboard input.
     let cancelled = false;
     (async () => {
-      const raw = await (await fetch(WORLD_URL)).json();
-      if (cancelled) return;
-      const result = validateWorld(raw);
-      if (!result.ok) { setErrors(result.errors.map((e) => `[${e.code}] ${e.message}`)); return; }
-      const world: World = WorldSchema.parse(raw);
+      let world: World;
+      if (injectedWorld) {
+        // Library mode: mountCaseQuest already validated + parsed this world.
+        world = injectedWorld;
+      } else {
+        const raw = await (await fetch(WORLD_URL)).json();
+        if (cancelled) return;
+        const result = validateWorld(raw);
+        if (!result.ok) { setErrors(result.errors.map((e) => `[${e.code}] ${e.message}`)); return; }
+        world = WorldSchema.parse(raw);
+      }
       const session = new GameSession(world);
       const bus = new EventBus();
       sessionRef.current = session;
@@ -232,7 +250,18 @@ export function App() {
     const session = sessionRef.current!;
     const decision = session.liveDecisions()[0];
     const r = session.chooseOption(decision.id, optionId, reasoning);
-    if (r.endedAt === "ending") { setOverlay({ kind: "debrief", data: session.debrief()! }); return; }
+    if (r.endedAt === "ending") {
+      const data = session.debrief()!;
+      setOverlay({ kind: "debrief", data });
+      // Reuse DebriefData fields — endingId and chosen labels come straight
+      // from session.debrief(); the fact count is the session's gathered set.
+      callbacks?.onDebriefComplete?.({
+        endingId: data.ending.id,
+        factsGathered: session.gatheredFactIds().length,
+        choices: data.choices.map((c) => c.chosenLabel),
+      });
+      return;
+    }
     // "node": chooseOption already moved the session to the new node's first
     // location — tell WorldScene to redraw that room (it only ever redraws
     // on "scene:render"), then run the usual banner + chain-check sequence.
