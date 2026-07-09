@@ -4,14 +4,33 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
-  "files": ["dist", "fixtures"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "fixtures",
+    "artifacts"
+  ],
   "scripts": {
+    "artifact": "tsx scripts/export-json-schema.ts",
     "build": "tsup src/index.ts --format esm --dts --clean --out-dir dist",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
-  "dependencies": { "zod": "^3.23.0" },
-  "devDependencies": { "typescript": "^5.5.0", "vitest": "^2.0.0", "@types/node": "^20.0.0", "tsup": "^8.0.0" }
+  "dependencies": {
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsup": "^8.0.0",
+    "tsx": "^4.23.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0",
+    "zod-to-json-schema": "^3.25.2"
+  }
 }

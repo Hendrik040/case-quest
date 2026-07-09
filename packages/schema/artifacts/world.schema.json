@@ -1,0 +1,473 @@
+{
+  "$ref": "#/definitions/World",
+  "definitions": {
+    "World": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "0.1"
+        },
+        "meta": {
+          "type": "object",
+          "properties": {
+            "case_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "title": {
+              "type": "string"
+            },
+            "synopsis": {
+              "type": "string"
+            },
+            "protagonist_actor_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "start_node_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "source_ref": {
+              "type": "string"
+            },
+            "provenance": {
+              "type": "object",
+              "properties": {
+                "pipeline_version": {
+                  "type": "string"
+                },
+                "extraction_model": {
+                  "type": "string"
+                },
+                "generated_at": {
+                  "type": "string"
+                },
+                "token_usage": {
+                  "type": "object",
+                  "properties": {
+                    "input": {
+                      "type": "number"
+                    },
+                    "output": {
+                      "type": "number"
+                    },
+                    "total": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "input",
+                    "output"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "case_id",
+            "title",
+            "synopsis",
+            "protagonist_actor_id",
+            "start_node_id"
+          ],
+          "additionalProperties": false
+        },
+        "learning_objectives": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "text"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "actors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "name": {
+                "type": "string"
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "protagonist",
+                  "npc"
+                ]
+              },
+              "is_playable": {
+                "type": "boolean"
+              },
+              "persona": {
+                "type": "object",
+                "properties": {
+                  "background": {
+                    "type": "string"
+                  },
+                  "personality": {
+                    "type": "string"
+                  },
+                  "communication_style": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "background",
+                  "personality",
+                  "communication_style"
+                ],
+                "additionalProperties": false
+              },
+              "goals": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "knowledge": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "dialogue": {
+                "type": "object",
+                "properties": {
+                  "greeting": {
+                    "type": "string"
+                  },
+                  "topics": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "fact_id": {
+                          "type": "string"
+                        },
+                        "line": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "fact_id",
+                        "line"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "additionalProperties": false
+              },
+              "sprite": {
+                "type": "object",
+                "properties": {
+                  "palette": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "role",
+              "is_playable",
+              "persona",
+              "goals",
+              "knowledge"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "locations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "name": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "office",
+                  "boardroom",
+                  "factory_floor",
+                  "shopfront",
+                  "warehouse",
+                  "client_site",
+                  "street",
+                  "home"
+                ]
+              },
+              "exits": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "art": {
+                "type": "object",
+                "properties": {
+                  "palette": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "type",
+              "exits"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "facts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "label": {
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              },
+              "sources": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "actor_id": {
+                      "type": "string"
+                    },
+                    "location_id": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "id",
+              "label",
+              "content",
+              "sources"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "decisions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "prompt": {
+                "type": "string"
+              },
+              "requires_facts": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "options": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "consequence_text": {
+                      "type": "string"
+                    },
+                    "illuminates": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "leads_to": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "label",
+                    "consequence_text",
+                    "illuminates",
+                    "leads_to"
+                  ],
+                  "additionalProperties": false
+                },
+                "minItems": 1
+              }
+            },
+            "required": [
+              "id",
+              "prompt",
+              "requires_facts",
+              "options"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "title": {
+                "type": "string"
+              },
+              "accessible_locations": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "present_actors": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "available_facts": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "live_decisions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "accessible_locations",
+              "present_actors",
+              "available_facts",
+              "live_decisions"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "endings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "title": {
+                "type": "string"
+              },
+              "summary": {
+                "type": "string"
+              },
+              "real_case_comparison": {
+                "type": "string"
+              },
+              "lo_outcomes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "lo_id": {
+                      "type": "string"
+                    },
+                    "verdict": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "lo_id",
+                    "verdict"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "summary",
+              "real_case_comparison",
+              "lo_outcomes"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "schema_version",
+        "meta",
+        "learning_objectives",
+        "actors",
+        "locations",
+        "facts",
+        "decisions",
+        "nodes",
+        "endings"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}
