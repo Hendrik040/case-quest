@@ -1,0 +1,362 @@
+{
+  "schema_version": "0.1",
+  "meta": {
+    "case_id": "kaskazi-network-ltd-distributing-to-the-bottom-of-the-pyramid-a",
+    "title": "KASKAZI NETWORK LTD \u2013 DISTRIBUTING TO THE BOTTOM OF THE PYRAMID (A)",
+    "synopsis": "The case study explores the entrepreneurial journey of Ng\u2019ang\u2019a Wanjohi, CEO of KasKazi Network Ltd, as he attempts to revolutionize the distribution network for the fragmented Kenyan micro retail market. The focus is on the 'mass market,' which comprises 75% of the Kenyan retail market, largely served by kiosks in low-income areas. Wanjohi's vision is to create an organized distribution system using bicycles, targeting the bottom of the pyramid. The case outlines his past business experiences, the challenges of penetrating the low-income market, and the potential for significant impact on local communities. Key challenges include overcoming logistical barriers, gaining trust from wholesalers and kiosk owners, and differentiating from potential competitors. The decision implications revolve around finalizing a business plan that addresses these challenges and effectively communicates the value proposition to stakeholders.",
+    "protagonist_actor_id": "actor-ng-ang-a-wanjohi-ceo-of-kaskazi-network-ltd",
+    "start_node_id": "node-evaluating-the-business-plan"
+  },
+  "learning_objectives": [
+    {
+      "id": "lo-1",
+      "text": "1. Analyze the challenges and opportunities of distributing products to the bottom of the pyramid in the Kenyan retail market."
+    },
+    {
+      "id": "lo-2",
+      "text": "2. Evaluate the effectiveness of using bicycles as a distribution method in fragmented retail markets."
+    },
+    {
+      "id": "lo-3",
+      "text": "3. Develop a strategic business plan for KasKazi Network Ltd that addresses potential risks and leverages market opportunities."
+    },
+    {
+      "id": "lo-4",
+      "text": "4. Assess the impact of organized distribution networks on micro-retail businesses in developing economies."
+    },
+    {
+      "id": "lo-5",
+      "text": "5. Formulate strategies for scaling a business model that targets under-served market segments in emerging markets."
+    }
+  ],
+  "actors": [
+    {
+      "id": "actor-ng-ang-a-wanjohi-ceo-of-kaskazi-network-ltd",
+      "name": "Ng\u2019ang\u2019a Wanjohi (CEO of KasKazi Network Ltd)",
+      "role": "protagonist",
+      "is_playable": true,
+      "persona": {
+        "background": "You play as the Ng\u2019ang\u2019a Wanjohi (CEO of KasKazi Network Ltd).",
+        "personality": "",
+        "communication_style": ""
+      },
+      "goals": [],
+      "knowledge": []
+    },
+    {
+      "id": "actor-hussein-bakari",
+      "name": "Hussein Bakari",
+      "role": "npc",
+      "is_playable": false,
+      "persona": {
+        "background": "Hussein Bakari is a close friend and collaborator of Wanjohi. He has been involved in the groundwork of understanding the low-income market alongside Wanjohi.",
+        "personality": "agreeableness: 7/10, conscientiousness: 8/10, extraversion: 6/10, neuroticism: 5/10, openness: 7/10",
+        "communication_style": ""
+      },
+      "goals": [
+        "Ensure efficient logistics for bicycle distribution",
+        "Recruit and train reliable Bicycle Sales Representatives",
+        "Support Wanjohi in implementing the business plan"
+      ],
+      "knowledge": [
+        "fact-bicycle-distribution",
+        "fact-credit-terms"
+      ]
+    },
+    {
+      "id": "actor-david",
+      "name": "David",
+      "role": "npc",
+      "is_playable": false,
+      "persona": {
+        "background": "David was an investor in the Pamoja Distribution Network, a previous venture proposed by Wanjohi. He has interests in starting a milk factory and has collaborated with Wanjohi on market research.",
+        "personality": "agreeableness: 6/10, conscientiousness: 7/10, extraversion: 5/10, neuroticism: 4/10, openness: 6/10",
+        "communication_style": ""
+      },
+      "goals": [
+        "Establish a successful milk factory",
+        "Target supermarket distribution channels",
+        "Explore viable investment opportunities"
+      ],
+      "knowledge": []
+    },
+    {
+      "id": "actor-unnamed-wholesaler",
+      "name": "Unnamed Wholesaler",
+      "role": "npc",
+      "is_playable": false,
+      "persona": {
+        "background": "A typical wholesaler operating in the low-income area of Kawangware, resistant to change and skeptical of new distribution methods.",
+        "personality": "agreeableness: 5/10, conscientiousness: 6/10, extraversion: 4/10, neuroticism: 5/10, openness: 3/10",
+        "communication_style": ""
+      },
+      "goals": [
+        "Maintain current business operations",
+        "Avoid risks associated with new distribution models",
+        "Maximize profits through established channels"
+      ],
+      "knowledge": [
+        "fact-wholesaler-resistance"
+      ]
+    }
+  ],
+  "locations": [
+    {
+      "id": "loc-kaskazi-office",
+      "name": "KasKazi Office",
+      "type": "office",
+      "exits": [
+        "loc-kawangware-streets",
+        "loc-wholesaler-s-shop"
+      ]
+    },
+    {
+      "id": "loc-kawangware-streets",
+      "name": "Kawangware Streets",
+      "type": "street",
+      "exits": [
+        "loc-kaskazi-office",
+        "loc-wholesaler-s-shop"
+      ]
+    },
+    {
+      "id": "loc-wholesaler-s-shop",
+      "name": "Wholesaler's Shop",
+      "type": "shopfront",
+      "exits": [
+        "loc-kaskazi-office",
+        "loc-kawangware-streets"
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "fact-market-opportunity",
+      "label": "market_opportunity",
+      "content": "The KasKazi Network will target 100,000 kiosks representing Ksh 7.5 billion ($115 million) in monthly sales, covering 75% of the Kenyan retail market.",
+      "sources": [
+        {
+          "location_id": "loc-kaskazi-office"
+        }
+      ]
+    },
+    {
+      "id": "fact-bicycle-distribution",
+      "label": "bicycle_distribution",
+      "content": "KasKazi Network plans to use bicycles for distribution to organize the fragmented Kenyan micro retail market.",
+      "sources": [
+        {
+          "actor_id": "actor-hussein-bakari"
+        }
+      ]
+    },
+    {
+      "id": "fact-wholesaler-resistance",
+      "label": "wholesaler_resistance",
+      "content": "Wholesalers are resistant to changing their traditional methods and are skeptical about using bicycles for distribution.",
+      "sources": [
+        {
+          "actor_id": "actor-unnamed-wholesaler"
+        }
+      ]
+    },
+    {
+      "id": "fact-credit-terms",
+      "label": "credit_terms",
+      "content": "Kiosk owners often rely on credit from wholesalers due to cash flow issues.",
+      "sources": [
+        {
+          "actor_id": "actor-hussein-bakari"
+        }
+      ]
+    },
+    {
+      "id": "fact-distribution-challenges",
+      "label": "distribution_challenges",
+      "content": "The mass market is fragmented with no reliable demand for new products and challenging access conditions.",
+      "sources": [
+        {
+          "location_id": "loc-kawangware-streets"
+        }
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "id": "dec-evaluate-business-plan",
+      "prompt": "What are the key strengths and weaknesses of the KasKazi Network business plan?",
+      "requires_facts": [
+        "fact-market-opportunity",
+        "fact-bicycle-distribution"
+      ],
+      "options": [
+        {
+          "id": "focus-on-market-potential",
+          "label": "Focus on market potential",
+          "consequence_text": "You highlight the large market potential, which is a key strength.",
+          "illuminates": [
+            "lo-1",
+            "lo-3"
+          ],
+          "leads_to": "node-negotiating-with-the-wholesaler"
+        },
+        {
+          "id": "overlook-distribution-challenges",
+          "label": "Overlook distribution challenges",
+          "consequence_text": "You miss the potential challenges in distribution, which could lead to operational issues.",
+          "illuminates": [
+            "lo-3"
+          ],
+          "leads_to": "node-negotiating-with-the-wholesaler"
+        }
+      ]
+    },
+    {
+      "id": "dec-negotiate-with-wholesaler",
+      "prompt": "How should you approach the wholesaler to secure favorable credit terms?",
+      "requires_facts": [
+        "fact-wholesaler-resistance",
+        "fact-credit-terms"
+      ],
+      "options": [
+        {
+          "id": "emphasize-mutual-benefits",
+          "label": "Emphasize mutual benefits",
+          "consequence_text": "You successfully negotiate terms by showing how both parties can benefit.",
+          "illuminates": [
+            "lo-5"
+          ],
+          "leads_to": "node-implementing-the-distribution-strategy"
+        },
+        {
+          "id": "insist-on-immediate-change",
+          "label": "Insist on immediate change",
+          "consequence_text": "The wholesaler is resistant and negotiations stall.",
+          "illuminates": [],
+          "leads_to": "node-implementing-the-distribution-strategy"
+        }
+      ]
+    },
+    {
+      "id": "dec-implement-distribution-strategy",
+      "prompt": "How should you organize the distribution team to maximize coverage?",
+      "requires_facts": [
+        "fact-distribution-challenges"
+      ],
+      "options": [
+        {
+          "id": "deploy-strategically-based-on-market-insights",
+          "label": "Deploy strategically based on market insights",
+          "consequence_text": "The distribution team is well-organized and effective.",
+          "illuminates": [
+            "lo-2",
+            "lo-4"
+          ],
+          "leads_to": "end-successful-implementation"
+        },
+        {
+          "id": "ignore-market-fragmentation",
+          "label": "Ignore market fragmentation",
+          "consequence_text": "The team struggles with inefficiencies and coverage issues.",
+          "illuminates": [],
+          "leads_to": "end-inefficient-implementation"
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "id": "node-evaluating-the-business-plan",
+      "title": "Evaluating the Business Plan",
+      "accessible_locations": [
+        "loc-kaskazi-office"
+      ],
+      "present_actors": [
+        "actor-hussein-bakari"
+      ],
+      "available_facts": [
+        "fact-market-opportunity",
+        "fact-bicycle-distribution"
+      ],
+      "live_decisions": [
+        "dec-evaluate-business-plan"
+      ]
+    },
+    {
+      "id": "node-negotiating-with-the-wholesaler",
+      "title": "Negotiating with the Wholesaler",
+      "accessible_locations": [
+        "loc-wholesaler-s-shop"
+      ],
+      "present_actors": [
+        "actor-unnamed-wholesaler",
+        "actor-hussein-bakari"
+      ],
+      "available_facts": [
+        "fact-wholesaler-resistance",
+        "fact-credit-terms"
+      ],
+      "live_decisions": [
+        "dec-negotiate-with-wholesaler"
+      ]
+    },
+    {
+      "id": "node-implementing-the-distribution-strategy",
+      "title": "Implementing the Distribution Strategy",
+      "accessible_locations": [
+        "loc-kawangware-streets"
+      ],
+      "present_actors": [
+        "actor-hussein-bakari"
+      ],
+      "available_facts": [
+        "fact-distribution-challenges"
+      ],
+      "live_decisions": [
+        "dec-implement-distribution-strategy"
+      ]
+    }
+  ],
+  "endings": [
+    {
+      "id": "end-successful-implementation",
+      "title": "successful_implementation",
+      "summary": "The KasKazi Network successfully implements its distribution strategy, gaining significant market share.",
+      "real_case_comparison": "This aligns with the potential success envisioned by Wanjohi.",
+      "lo_outcomes": [
+        {
+          "lo_id": "lo-1",
+          "verdict": "achieved"
+        },
+        {
+          "lo_id": "lo-2",
+          "verdict": "achieved"
+        },
+        {
+          "lo_id": "lo-4",
+          "verdict": "achieved"
+        }
+      ]
+    },
+    {
+      "id": "end-inefficient-implementation",
+      "title": "inefficient_implementation",
+      "summary": "The distribution strategy fails to address market fragmentation, leading to inefficiencies and limited success.",
+      "real_case_comparison": "Reflects potential pitfalls if challenges are not addressed.",
+      "lo_outcomes": [
+        {
+          "lo_id": "lo-1",
+          "verdict": "partial"
+        },
+        {
+          "lo_id": "lo-2",
+          "verdict": "missed"
+        },
+        {
+          "lo_id": "lo-4",
+          "verdict": "partial"
+        }
+      ]
+    }
+  ]
+}
