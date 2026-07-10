@@ -72,18 +72,25 @@ pnpm -C packages/engine build
 pnpm -C packages/schema build
 (pnpm -C packages/engine dev &) && sleep 3   # dev server must be up first
 pnpm -C packages/engine e2e                  # plays the whole case, screenshots every beat
-pnpm -C packages/engine e2e --smoke          # boot through the first encounter, then stop
+pnpm -C packages/engine e2e --smoke          # boot through the first beat, then stop
+CQ_WORLD_URL=/worlds/other.world.json pnpm -C packages/engine e2e
+                                             # play a different world (any valid v0.1)
 ```
 
 `scripts/e2e-drive.mjs` (headless real Chrome via `playwright-core`, no
-bundled Chromium download) drives the entire "wholesale-offer" case start to
-finish — boot, the roastery-floor encounter chain, a fact picked up off the
-map, a door transit into the back office, its encounter chain, the decision
-prompt, the decision encounter (options → confirm → written reasoning), the
-debrief pages, and the terminal panel — then asserts
-`window.__cqSession.mode() === "debrief"` with zero page errors. Screenshots
-land in `e2e-shots/` (gitignored) so a human can eyeball the diorama grammar
-(platforms, panels, message-box skins).
+bundled Chromium download) plays any valid world.json v0.1 world start to
+finish with a world-agnostic strategy loop driven by live session state
+(`window.__cqSession` / `window.__cqScene`): encounters exhaust every unasked
+topic then MOVE ON; roaming gathers ungathered fact orbs, talks to actors
+that can still reveal something, and takes doors toward the nearest
+unvisited location; a decision prompt is always entered, picking the FIRST
+option with a generic reasoning line; the debrief reel is advanced to the
+terminal panel. A hard step cap fails the run loudly instead of wandering an
+unwinnable world forever. It then asserts
+`window.__cqSession.mode() === "debrief"` with zero page errors. Defaults to
+the committed "wholesale-offer" fixture (`CQ_WORLD_URL` overrides — see
+above); screenshots land in `e2e-shots/` (gitignored) so a human can eyeball
+the diorama grammar (platforms, panels, message-box skins).
 
 Two techniques the driver relies on, hard-won by driving this UI:
 
