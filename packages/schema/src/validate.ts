@@ -17,6 +17,7 @@ export type IssueCode =
   | "unreachable_node"
   | "dead_end_node"
   | "fact_unsolvable"
+  | "fact_unobtainable"
   | "objective_unused"
   | "actor_reveals_nothing"
   | "fact_unused";
@@ -197,8 +198,28 @@ function checkFactSolvability(world: World): Issue[] {
   if (!nodeIds.has(start)) return issues; // start_missing reported elsewhere
 
   const decisionById = new Map(world.decisions.map((d) => [d.id, d]));
+  const factById = new Map(world.facts.map((f) => [f.id, f]));
+
+  // Mirrors the engine's placement resolution: a fact is gatherable in a node
+  // iff the node lists it in available_facts AND at least one of its sources
+  // is reachable there — a source location in accessible_locations (fact spot)
+  // or a source actor in present_actors (dialogue).
+  const gatherableAt = (n: World["nodes"][number], fid: string): boolean => {
+    if (!n.available_facts.includes(fid)) return false;
+    const f = factById.get(fid);
+    if (!f) return false;
+    const locations = new Set(n.accessible_locations);
+    const actors = new Set(n.present_actors);
+    return f.sources.some(
+      (s) =>
+        (s.location_id !== undefined && locations.has(s.location_id)) ||
+        (s.actor_id !== undefined && actors.has(s.actor_id)),
+    );
+  };
+
   const providers = new Map<string, Set<string>>();
   for (const n of world.nodes) for (const fid of n.available_facts) {
+    if (!gatherableAt(n, fid)) continue;
     if (!providers.has(fid)) providers.set(fid, new Set());
     providers.get(fid)!.add(n.id);
   }
@@ -209,10 +230,17 @@ function checkFactSolvability(world: World): Issue[] {
       if (!d) continue;
       for (const fid of d.requires_facts) {
         const provs = providers.get(fid) ?? new Set<string>();
-        if (provs.has(n.id)) continue; // available at the decision's own node
+        if (provs.has(n.id)) continue; // gatherable at the decision's own node
         // If n is still reachable with all provider nodes removed, some path avoids the fact.
         const reachedAvoiding = reachableFrom(start, edges, provs);
-        if (reachedAvoiding.has(n.id)) {
+        if (!reachedAvoiding.has(n.id)) continue; // every path passes a provider
+        if (n.available_facts.includes(fid)) {
+          issues.push({
+            code: "fact_unobtainable",
+            message: `decision "${d.id}" in node "${n.id}" requires fact "${fid}", which is listed in the node's available_facts but cannot be gathered there — no source actor is in present_actors and no source location is in accessible_locations.`,
+            path: `nodes.${n.id}.live_decisions`,
+          });
+        } else {
           issues.push({
             code: "fact_unsolvable",
             message: `decision "${d.id}" in node "${n.id}" requires fact "${fid}", but that fact is not guaranteed discoverable on every path to "${n.id}" — a player could reach the decision without it.`,
