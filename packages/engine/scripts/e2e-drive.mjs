@@ -1,19 +1,27 @@
 #!/usr/bin/env node
 // Committed end-to-end playthrough driver for @case-quest/engine.
 //
-// Boots the dev server's page in headless Chrome and plays the whole
-// "wholesale-offer" toy case start to finish: boot -> location banner ->
-// auto-triggered encounter chain (roaster, buyer) -> a fact picked up off
-// the world map -> a door transit -> a second encounter chain (bookkeeper)
-// -> the decision prompt -> the decision encounter (options -> confirm ->
-// written reasoning) -> the debrief pages -> the terminal panel. Screenshots
-// every beat to `e2e-shots/` (gitignored) so a human can eyeball the diorama
-// grammar (platforms, panels, message-box skins).
+// Boots the dev server's page in headless Chrome and plays a two-room, one-
+// decision case start to finish: boot -> location banner -> auto-triggered
+// encounter chain (two agents) -> a fact picked up off the world map -> a
+// door transit -> a second encounter chain (one agent) -> the decision
+// prompt -> the decision encounter (options -> confirm -> written reasoning)
+// -> the debrief pages -> the terminal panel. Defaults to the committed
+// "wholesale-offer" toy case (roaster, buyer, then bookkeeper); set
+// CQ_WORLD_URL to drive a different world of the same shape instead — actor
+// and location labels below are read live off `window.__cqSession` rather
+// than hardcoded. Screenshots every beat to `e2e-shots/` (gitignored) so a
+// human can eyeball the diorama grammar (platforms, panels, message-box
+// skins).
 //
 // Usage:
 //   pnpm -C packages/engine dev &            # dev server must already be up
 //   pnpm -C packages/engine e2e              # full playthrough
 //   pnpm -C packages/engine e2e --smoke      # boot through the first encounter, then stop
+//   CQ_WORLD_URL=/worlds/other.world.json pnpm -C packages/engine e2e
+//                                             # drive a different world (same
+//                                             # two-room / two-chain / one-decision
+//                                             # shape); unset, behavior is unchanged.
 //
 // Hard-won rules baked into the helpers below (see README's "e2e" section):
 //  - Launch real installed Chrome (`channel: "chrome"`) — no bundled Chromium
@@ -36,6 +44,13 @@ import { dirname, join } from "node:path";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SHOTS_DIR = join(__dirname, "..", "e2e-shots");
 const BASE_URL = process.env.CQ_E2E_URL ?? "http://localhost:5173";
+// When set, drive the standalone page against this world instead of its
+// default (public/worlds/wholesale-offer.world.json). Threaded through as a
+// `?world=` query param that App.tsx's standalone fetch branch honors
+// (dev/test-only seam — see App.tsx's resolveWorldUrl); unset, the driven
+// page's boot is byte-identical to before this flag existed.
+const CQ_WORLD_URL = process.env.CQ_WORLD_URL;
+const GOTO_URL = CQ_WORLD_URL ? `${BASE_URL}?world=${encodeURIComponent(CQ_WORLD_URL)}` : BASE_URL;
 const SMOKE = process.argv.includes("--smoke");
 
 mkdirSync(SHOTS_DIR, { recursive: true });
@@ -72,6 +87,13 @@ async function getInteractables(page) {
 }
 async function sessionMode(page) {
   return page.evaluate(() => window.__cqSession.mode());
+}
+async function currentLocationId(page) {
+  return page.evaluate(() => window.__cqSession.currentLocationId());
+}
+/** Actor id of the encounter currently on screen, read live rather than assumed. */
+async function currentEncounterActorId(page) {
+  return page.evaluate(() => window.__cqSession.encounterState()?.actorId ?? "actor");
 }
 
 /**
@@ -249,21 +271,26 @@ async function exhaustTypewriter(page, maxPresses = 40) {
  * typewriter, opens ASK, picks the (fixture's single) topic, waits out the
  * reveal typewriter, then navigates the action menu to MOVE ON. Assumes
  * exactly one topic per agent, true for every actor in the wholesale-offer
- * fixture this driver plays; a multi-topic actor would need this looped.
+ * fixture this driver plays by default; a multi-topic actor would need this
+ * looped. Screenshot/log labels are read live off `window.__cqSession`
+ * (rather than passed in hardcoded) so this needs no changes to drive a
+ * `CQ_WORLD_URL`-supplied world with the same shape.
  */
-async function runAgentEncounter(page, shots = {}) {
+async function runAgentEncounter(page) {
+  const actorId = await currentEncounterActorId(page);
+  console.log(`talking to ${actorId} ...`);
   await exhaustTypewriter(page); // intro -> menu
   await waitVisible(page, "[data-testid=action-menu]");
-  if (shots.menu) await shot(page, shots.menu);
+  await shot(page, `action-menu-${actorId}`);
 
   await press(page, "Space"); // ASK (cursor defaults to the first, enabled option)
   await waitVisible(page, "[data-testid=topics-panel]");
-  if (shots.topics) await shot(page, shots.topics);
+  await shot(page, `topics-panel-${actorId}`);
 
   await press(page, "Space"); // pick the (only) topic
   await waitVisible(page, "[data-testid=typewriter]");
   await page.waitForTimeout(250); // let a few characters type in before the screenshot
-  if (shots.reveal) await shot(page, shots.reveal);
+  await shot(page, `reveal-${actorId}`);
   await exhaustTypewriter(page); // reveal -> back to menu
 
   await waitVisible(page, "[data-testid=action-menu]");
@@ -285,17 +312,17 @@ async function main() {
     if (m.type() === "error") consoleErrors.push(`console: ${m.text()}`);
   });
 
-  console.log(`booting ${BASE_URL} ${SMOKE ? "(smoke)" : "(full playthrough)"} ...`);
-  await page.goto(BASE_URL);
+  console.log(`booting ${GOTO_URL} ${SMOKE ? "(smoke)" : "(full playthrough)"} ...`);
+  await page.goto(GOTO_URL);
   await page.waitForFunction(() => window.__cqScene && window.__cqSession, null, { timeout: 30000 });
   await page.mouse.click(500, 350); // defensive focus, mirrors the M2 driver
   await page.waitForTimeout(300);
 
   await waitVisible(page, "[data-testid=location-banner]");
-  await shot(page, "banner-roastery-floor");
+  await shot(page, `banner-${await currentLocationId(page)}`);
 
   await waitVisible(page, "[data-testid=encounter]", 6000);
-  await shot(page, "encounter-roaster-intro");
+  await shot(page, `encounter-${await currentEncounterActorId(page)}-intro`);
 
   if (SMOKE) {
     const mode = await sessionMode(page);
@@ -305,52 +332,37 @@ async function main() {
     return;
   }
 
-  // --- roastery floor: the auto-chain (roaster, then buyer) -------------------
-  console.log("talking to roaster ...");
-  await runAgentEncounter(page, {
-    menu: "action-menu-roaster",
-    topics: "topics-panel-roaster",
-    reveal: "reveal-roaster",
-  });
+  // --- first room: the auto-chain (wholesale-offer: roaster, then buyer) ------
+  await runAgentEncounter(page);
+  await runAgentEncounter(page);
 
-  console.log("talking to buyer ...");
-  await runAgentEncounter(page, {
-    menu: "action-menu-buyer",
-    topics: "topics-panel-buyer",
-    reveal: "reveal-buyer",
-  });
-
-  console.log("waiting for roastery_floor chain to end (back to roaming) ...");
+  const roomOneId = await currentLocationId(page);
+  console.log(`waiting for ${roomOneId} chain to end (back to roaming) ...`);
   await page.waitForFunction(() => window.__cqSession.mode() === "roaming", null, { timeout: 8000 });
-  await shot(page, "roaming-roastery-floor");
+  await shot(page, `roaming-${roomOneId}`);
 
-  // --- pick up the capacity fact directly off the map --------------------------
+  // --- pick up a fact directly off the map --------------------------------------
   console.log("walking to the fact orb ...");
   const roomInteractables = await getInteractables(page);
   const factOrb = roomInteractables.find((i) => i.kind === "fact");
-  if (!factOrb) throw new Error("expected a fact orb on the roastery floor");
+  if (!factOrb) throw new Error(`expected a fact orb in ${roomOneId}`);
   await approachAndInteract(page, factOrb);
   await waitVisible(page, "[data-testid=field-msg]");
   await page.waitForTimeout(400); // let more of the line type in before the screenshot
-  await shot(page, "field-msg-fact-capacity");
+  await shot(page, `field-msg-fact-${factOrb.id}`);
   await exhaustTypewriter(page);
 
-  // --- take the door to the back office -----------------------------------------
+  // --- take the door to the next room --------------------------------------------
   console.log("walking to the door ...");
   const door = (await getInteractables(page)).find((i) => i.kind === "door");
-  if (!door) throw new Error("expected a door on the roastery floor");
+  if (!door) throw new Error(`expected a door in ${roomOneId}`);
   await approachAndInteract(page, door);
 
   await waitVisible(page, "[data-testid=location-banner]");
-  await shot(page, "banner-back-office");
+  await shot(page, `banner-${await currentLocationId(page)}`);
 
   await waitVisible(page, "[data-testid=encounter]", 6000);
-  console.log("talking to the bookkeeper ...");
-  await runAgentEncounter(page, {
-    menu: "action-menu-bookkeeper",
-    topics: "topics-panel-bookkeeper",
-    reveal: "reveal-bookkeeper",
-  });
+  await runAgentEncounter(page);
 
   // --- the decision unlocks -------------------------------------------------------
   console.log("waiting for the decision prompt ...");

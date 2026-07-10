@@ -17,6 +17,23 @@ import { bigGrid } from "./art/grids";
 
 const WORLD_URL = "/worlds/wholesale-offer.world.json";
 
+// Dev/test-only seam: the standalone page's own fetch branch below (never
+// reached by the mountCaseQuest embed, which always passes `world` and so
+// never calls this) honors a `?world=<url>` query param, letting the
+// committed e2e driver (scripts/e2e-drive.mjs, via CQ_WORLD_URL) point the
+// driven page at an arbitrary world file instead of the default
+// wholesale-offer fixture. Gated on `import.meta.env.DEV` (true for both
+// `vite dev` and the vitest default mode, false for a `vite build` of the
+// standalone app) so it's inert in production; irrelevant either way to the
+// lib build, which never reaches this function.
+function resolveWorldUrl(): string {
+  if (import.meta.env.DEV) {
+    const override = new URLSearchParams(window.location.search).get("world");
+    if (override) return override;
+  }
+  return WORLD_URL;
+}
+
 // Host-page callbacks for library embeds (see src/lib.ts). Defined here (not
 // lib.ts) so App can type its props without importing its own consumer.
 export interface CaseQuestCallbacks {
@@ -135,7 +152,7 @@ export function App({ world: injectedWorld, callbacks }: AppProps) {
         // Library mode: mountCaseQuest already validated + parsed this world.
         world = injectedWorld;
       } else {
-        const raw = await (await fetch(WORLD_URL)).json();
+        const raw = await (await fetch(resolveWorldUrl())).json();
         if (cancelled) return;
         const result = validateWorld(raw);
         if (!result.ok) { setErrors(result.errors.map((e) => `[${e.code}] ${e.message}`)); return; }
