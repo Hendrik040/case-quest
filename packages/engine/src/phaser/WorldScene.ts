@@ -4,7 +4,7 @@ import type { EventBus } from "../bridge/events";
 import { resolvePlacement, resolveSeating } from "../state/placement";
 import { getTemplate, TILE, TILE_SIZE, type RoomTemplate } from "./templates";
 import { generatePlaceholderTextures } from "./textures";
-import { isTriggerZoneTile, enteredTriggerZone, isFacingTable, meetingStartPayload } from "./meetingTrigger";
+import { isTriggerZoneTile, enteredTriggerZone, isFacingTable, meetingStartPayload, assignNpcTiles } from "./meetingTrigger";
 
 const MOVE_DURATION_MS = 220;
 
@@ -181,8 +181,13 @@ export class WorldScene extends Phaser.Scene {
     const placement = resolvePlacement(world, node, loc.id);
     this.seatedActorIds = resolveSeating(world, node, loc.id).seatedActorIds;
 
+    // Seat-overflow fix (Task 1.6 review): assignNpcTiles is slot i for
+    // i < poiSlots.length (identical to the old behavior), and a deterministic
+    // row-major free-tile scan beyond that — the old `i % poiSlots.length`
+    // wrap stacked two actors on one tile whenever NPCs outnumbered slots.
+    const npcTiles = assignNpcTiles(tpl, placement.npcIds.length);
     placement.npcIds.forEach((actorId, i) => {
-      const slot = tpl.poiSlots[i % tpl.poiSlots.length];
+      const slot = npcTiles[i];
       const { x, y } = characterFoot(slot.x, slot.y);
       // Palette index keyed by the actor's position in the node's
       // `present_actors` list (not placement order): App uses the same

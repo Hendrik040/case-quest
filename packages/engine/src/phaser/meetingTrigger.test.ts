@@ -1,10 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { getTemplate } from "./templates";
+import { getTemplate, TILE } from "./templates";
 import {
   isTriggerZoneTile,
   enteredTriggerZone,
   isFacingTable,
   meetingStartPayload,
+  assignNpcTiles,
 } from "./meetingTrigger";
 
 describe("meetingTrigger helpers", () => {
@@ -57,5 +58,42 @@ describe("meetingTrigger helpers", () => {
     expect(payload).toEqual({ actorIds: ["a1", "a2"] });
     payload.actorIds.push("a3");
     expect(seated).toEqual(["a1", "a2"]); // not mutated by the caller's own push
+  });
+
+  describe("assignNpcTiles", () => {
+    it("is identical to direct poiSlot indexing when count fits the slots", () => {
+      const tiles = assignNpcTiles(boardroom, 3);
+      expect(tiles).toEqual(boardroom.poiSlots.slice(0, 3));
+    });
+
+    it("overflow: 8 actors on the 6-slot boardroom get 8 distinct, unblocked tiles", () => {
+      const tiles = assignNpcTiles(boardroom, 8);
+      expect(tiles).toHaveLength(8); // nobody dropped
+      const keys = new Set(tiles.map((p) => `${p.x},${p.y}`));
+      expect(keys.size).toBe(8); // no stacking
+      for (const p of tiles) {
+        const t = boardroom.tiles[p.y][p.x];
+        expect(t).not.toBe(TILE.WALL);
+        expect(t).not.toBe(TILE.DESK);
+        expect(t).not.toBe(TILE.TABLE);
+        expect(t).not.toBe(TILE.DOOR);
+      }
+      // first 6 are exactly the template's slots, preserving existing behavior
+      expect(tiles.slice(0, 6)).toEqual(boardroom.poiSlots);
+    });
+
+    it("overflow tiles avoid the player spawn, doorSlots, and triggerZone", () => {
+      const tiles = assignNpcTiles(boardroom, 12).slice(6); // just the overflow
+      const avoid = new Set(
+        [boardroom.playerSpawn, ...boardroom.doorSlots, ...boardroom.triggerZone].map(
+          (p) => `${p.x},${p.y}`,
+        ),
+      );
+      for (const p of tiles) expect(avoid.has(`${p.x},${p.y}`)).toBe(false);
+    });
+
+    it("is deterministic", () => {
+      expect(assignNpcTiles(boardroom, 9)).toEqual(assignNpcTiles(boardroom, 9));
+    });
   });
 });
