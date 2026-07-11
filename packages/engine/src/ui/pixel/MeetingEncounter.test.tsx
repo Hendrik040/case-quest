@@ -178,6 +178,187 @@ describe("MeetingEncounter", () => {
     expect(container.querySelector('[data-testid="typewriter"]')).not.toBeNull();
   });
 
+  it("SAY targeted @ALL passes target 'all' to the onSay callback", async () => {
+    const session = newSession();
+    const view = session.startMeeting(["roaster", "buyer"]);
+    async function* fakeStream() {
+      yield { actorId: "roaster", token: "We all agree.", done: true };
+    }
+    const onSay = vi.fn().mockReturnValue(fakeStream());
+
+    act(() => {
+      root.render(
+        <MeetingEncounter
+          view={view}
+          playerName="Maya"
+          facts={facts}
+          agentSpriteUrl={(i) => `sprite-${i}.png`}
+          playerBackUrl="player.png"
+          onAsk={(actorId, factId) => session.meetingAsk(actorId, factId)}
+          onSay={onSay}
+          onWrapUp={vi.fn()}
+        />,
+      );
+    });
+
+    act(() => clickByText(container, "meeting-action-menu", "SAY"));
+    act(() => clickByText(container, "choice-box", "@ALL"));
+    const textarea = container.querySelector<HTMLTextAreaElement>('[data-testid="meeting-say-textarea"]')!;
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")!.set!;
+      setter.call(textarea, "Thoughts, everyone?");
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => {
+      container.querySelector<HTMLElement>('[data-testid="meeting-say-submit"]')!.click();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onSay).toHaveBeenCalledWith({ target: "all", text: "Thoughts, everyone?" });
+    expect(container.querySelector('[data-testid="typewriter"]')).not.toBeNull();
+  });
+
+  it("SAY recovers from a host stream that throws mid-iteration (no stuck phase, diegetic fallback line)", async () => {
+    const session = newSession();
+    const view = session.startMeeting(["roaster", "buyer"]);
+    async function* brokenStream(): AsyncGenerator<{ actorId: string; token?: string; done?: boolean }> {
+      yield { actorId: "roaster", token: "Well" };
+      throw new Error("SSE connection dropped");
+    }
+    const onSay = vi.fn().mockReturnValue(brokenStream());
+
+    act(() => {
+      root.render(
+        <MeetingEncounter
+          view={view}
+          playerName="Maya"
+          facts={facts}
+          agentSpriteUrl={(i) => `sprite-${i}.png`}
+          playerBackUrl="player.png"
+          onAsk={(actorId, factId) => session.meetingAsk(actorId, factId)}
+          onSay={onSay}
+          onWrapUp={vi.fn()}
+        />,
+      );
+    });
+
+    act(() => clickByText(container, "meeting-action-menu", "SAY"));
+    act(() => clickByText(container, "choice-box", "@Sam"));
+    const textarea = container.querySelector<HTMLTextAreaElement>('[data-testid="meeting-say-textarea"]')!;
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")!.set!;
+      setter.call(textarea, "Tell me more");
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => {
+      container.querySelector<HTMLElement>('[data-testid="meeting-say-submit"]')!.click();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Not stuck in thinking/streaming — landed on the shared revealing phase.
+    expect(container.querySelector('[data-testid="meeting-thinking"]')).toBeNull();
+    expect(container.querySelector('[data-testid="meeting-stream"]')).toBeNull();
+    const typewriter = container.querySelector<HTMLElement>('[data-testid="typewriter"]');
+    expect(typewriter).not.toBeNull();
+    // Skip the type-out (click = advance-to-fully-typed) and read the line.
+    act(() => typewriter!.click());
+    expect(typewriter!.textContent).toContain("the line goes quiet");
+
+    // And the player can advance back to the action menu — fully recovered.
+    act(() => typewriter!.click());
+    expect(container.querySelector('[data-testid="meeting-action-menu"]')).not.toBeNull();
+  });
+
+  it("SAY shows the same fallback line when the stream ends with no tokens (empty reply)", async () => {
+    const session = newSession();
+    const view = session.startMeeting(["roaster", "buyer"]);
+    async function* emptyStream() {
+      yield { actorId: "roaster", done: true };
+    }
+    const onSay = vi.fn().mockReturnValue(emptyStream());
+
+    act(() => {
+      root.render(
+        <MeetingEncounter
+          view={view}
+          playerName="Maya"
+          facts={facts}
+          agentSpriteUrl={(i) => `sprite-${i}.png`}
+          playerBackUrl="player.png"
+          onAsk={(actorId, factId) => session.meetingAsk(actorId, factId)}
+          onSay={onSay}
+          onWrapUp={vi.fn()}
+        />,
+      );
+    });
+
+    act(() => clickByText(container, "meeting-action-menu", "SAY"));
+    act(() => clickByText(container, "choice-box", "@Sam"));
+    const textarea = container.querySelector<HTMLTextAreaElement>('[data-testid="meeting-say-textarea"]')!;
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")!.set!;
+      setter.call(textarea, "Anything?");
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => {
+      container.querySelector<HTMLElement>('[data-testid="meeting-say-submit"]')!.click();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const typewriter = container.querySelector<HTMLElement>('[data-testid="typewriter"]');
+    expect(typewriter).not.toBeNull();
+    act(() => typewriter!.click());
+    expect(typewriter!.textContent).toContain("the line goes quiet");
+  });
+
+  it("WRAP UP survives a rejecting onSceneWrapUp (fire-and-forget, no unhandled rejection)", async () => {
+    const session = newSession();
+    const view = session.startMeeting(["roaster", "buyer"]);
+    const onWrapUp = vi.fn();
+    const onSceneWrapUp = vi.fn().mockRejectedValue(new Error("host down"));
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+
+    try {
+      act(() => {
+        root.render(
+          <MeetingEncounter
+            view={view}
+            playerName="Maya"
+            facts={facts}
+            agentSpriteUrl={(i) => `sprite-${i}.png`}
+            playerBackUrl="player.png"
+            onAsk={(actorId, factId) => session.meetingAsk(actorId, factId)}
+            onWrapUp={onWrapUp}
+            onSceneWrapUp={onSceneWrapUp}
+          />,
+        );
+      });
+
+      act(() => clickByText(container, "meeting-action-menu", "WRAP UP"));
+      await act(async () => {
+        clickByText(container, "choice-box", "YES");
+        // Let the rejected promise settle (and the unhandledRejection hook
+        // fire, if the component failed to catch it).
+        await new Promise((r) => setTimeout(r, 0));
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      expect(onWrapUp).toHaveBeenCalledTimes(1);
+      expect(onSceneWrapUp).toHaveBeenCalledTimes(1);
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
   it("WRAP UP confirm (YES) fires the onWrapUp callback", () => {
     const session = newSession();
     const view = session.startMeeting(["roaster", "buyer"]);

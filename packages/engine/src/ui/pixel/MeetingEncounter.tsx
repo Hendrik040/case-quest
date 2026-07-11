@@ -22,6 +22,15 @@ type Phase =
   | "notes"
   | "wrapConfirm";
 
+/**
+ * Diegetic beat for a SAY exchange that yields nothing to show: the host
+ * stream threw mid-iteration (network drop, host bug) or completed without
+ * a single token. Rendered through the same Emerald-style reveal as any
+ * other line — the player lands back on the action menu after it, never a
+ * stuck screen.
+ */
+export const SAY_QUIET_LINE = "...the line goes quiet. Maybe try again.";
+
 const MENU_ACTIONS: { id: "ask" | "say" | "notes" | "wrapUp"; label: string }[] = [
   { id: "ask", label: "ASK" },
   { id: "say", label: "SAY" },
@@ -231,14 +240,23 @@ export function MeetingEncounter({
       setStreamText("");
       setPhase("thinking");
       let firstToken = true;
-      const stream = onSay({ target, text });
-      consumeMeetingChatStream(stream, (partial) => {
-        if (firstToken) { firstToken = false; setPhase("streaming"); }
-        setStreamText(partial);
-      }).then(({ text: finalText }) => {
-        setRevealLine(finalText);
+      // Every failure mode funnels into the shared "revealing" phase with a
+      // diegetic fallback line — a host stream that throws mid-iteration, an
+      // `onSay` that throws synchronously, or a stream that ends without a
+      // single token must never strand the player in thinking/streaming,
+      // which render no menu and no cancel affordance.
+      try {
+        consumeMeetingChatStream(onSay({ target, text }), (partial) => {
+          if (firstToken) { firstToken = false; setPhase("streaming"); }
+          setStreamText(partial);
+        }).then(
+          ({ text: finalText }) => setRevealLine(finalText.trim().length > 0 ? finalText : SAY_QUIET_LINE),
+          () => setRevealLine(SAY_QUIET_LINE),
+        ).then(() => setPhase("revealing"));
+      } catch {
+        setRevealLine(SAY_QUIET_LINE);
         setPhase("revealing");
-      });
+      }
     } else {
       const targetName = target === "all" ? "Everyone" : view.participants.find((p) => p.actorId === target.actorId)?.name ?? "They";
       setRevealLine(cannedSayLine(targetName));
@@ -249,7 +267,10 @@ export function MeetingEncounter({
   const handleWrapConfirmPick = (id: string) => {
     if (id !== "yes") { setPhase("menu"); return; }
     onWrapUp();
-    onSceneWrapUp?.();
+    // Fire-and-forget by design (a network call must not hang the confirm),
+    // so a rejection has nowhere to land — swallow it explicitly rather than
+    // leaking an unhandled rejection from a click handler.
+    onSceneWrapUp?.().catch(() => {});
   };
 
   return (
