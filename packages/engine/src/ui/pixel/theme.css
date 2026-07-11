@@ -571,6 +571,76 @@ img.cq-sprite {
 }
 
 /* ---------------------------------------------------------------------- */
+/* MeetingEncounter (M5 Task 2.2)                                          */
+/* ---------------------------------------------------------------------- */
+
+/* Replaces EncounterDiorama's single enemy platform: a row of busts, one
+   per seated participant, laid out across the top pinstripe band instead of
+   one sprite on one platform (there's no fixed chain to slide through). */
+.cq-meeting-busts {
+  position: absolute;
+  top: calc(var(--px) * 14);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  justify-content: center;
+  gap: calc(var(--px) * 10);
+  z-index: 5;
+}
+
+.cq-meeting-bust {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--px) * 1);
+  cursor: pointer;
+  opacity: 0.75;
+}
+
+.cq-meeting-bust-sprite {
+  width: calc(var(--px) * 40);
+  height: calc(var(--px) * 40);
+}
+
+.cq-meeting-bust-name {
+  font-family: var(--cq-font);
+  font-size: calc(var(--px) * 4);
+  color: var(--cq-field-text);
+  background: var(--cq-panel-fill);
+  border: calc(var(--px) * 1) solid var(--cq-panel-border);
+  border-radius: calc(var(--px) * 1);
+  padding: 0 calc(var(--px) * 2);
+}
+
+/* Active speaker: full opacity + a highlight ring, mirroring the pop-in
+   panels' "this one's live" language elsewhere in the kit. */
+.cq-meeting-bust.cq-active-speaker {
+  opacity: 1;
+}
+
+.cq-meeting-bust.cq-active-speaker .cq-meeting-bust-sprite {
+  filter: drop-shadow(0 0 calc(var(--px) * 2) var(--cq-hp-tag));
+}
+
+.cq-meeting-bust.cq-active-speaker .cq-meeting-bust-name {
+  border-color: var(--cq-hp-tag);
+  font-weight: bold;
+}
+
+/* ASK panel persona headers: same grid as TopicsPanel, but the header row
+   spans both columns and reads as a label, not a pickable option. */
+.cq-meeting-ask-header {
+  grid-column: 1 / -1;
+  font-weight: bold;
+  opacity: 0.65 !important;
+  padding-top: calc(var(--px) * 3);
+}
+
+.cq-meeting-ask-header:first-child {
+  padding-top: 0;
+}
+
+/* ---------------------------------------------------------------------- */
 /* ReasoningPanel (Task 9)                                                 */
 /* ---------------------------------------------------------------------- */
 
