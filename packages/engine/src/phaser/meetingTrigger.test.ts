@@ -7,6 +7,8 @@ import {
   meetingStartPayload,
   assignNpcTiles,
   assignFactTiles,
+  suppressesInteract,
+  shouldAutoOpenMeeting,
 } from "./meetingTrigger";
 
 describe("meetingTrigger helpers", () => {
@@ -190,6 +192,44 @@ describe("meetingTrigger helpers", () => {
 
     it("is deterministic", () => {
       expect(assignFactTiles(boardroom, 3, 5)).toEqual(assignFactTiles(boardroom, 3, 5));
+    });
+  });
+
+  // Final review (C1): belt-and-suspenders guard against the 1-frame gap between
+  // fireMeetingStart (fired from a tween onComplete, which Phaser runs BEFORE
+  // scene.update() in the same frame) and the world:freeze bus event that would
+  // otherwise block a stale, latched interact — see WorldScene.ts's interact()/update().
+  describe("suppressesInteract", () => {
+    it("is true only once a meeting is already active", () => {
+      expect(suppressesInteract("meeting")).toBe(true);
+    });
+
+    it("is false for every other session mode, including traversing (route NPCs/doors must stay interactable)", () => {
+      expect(suppressesInteract("roaming")).toBe(false);
+      expect(suppressesInteract("traversing")).toBe(false);
+      expect(suppressesInteract("encounter")).toBe(false);
+      expect(suppressesInteract("decision")).toBe(false);
+      expect(suppressesInteract("debrief")).toBe(false);
+    });
+  });
+
+  // Final review (C2): a wrapped-up node's venue triggerZone must not auto-reopen the
+  // meeting on mere zone re-entry (leave/re-enter, or walking back into a completed
+  // node's venue mid-traversal) — but a deliberate Space-at-table press (the OTHER call
+  // site of fireMeetingStart, interact()'s isFacingTable branch) is a manual re-open that
+  // must keep working regardless of wrapped state; this gate is for the AUTOMATIC path only.
+  describe("shouldAutoOpenMeeting", () => {
+    it("opens automatically on zone entry when the node hasn't been wrapped up yet", () => {
+      expect(shouldAutoOpenMeeting(true, false)).toBe(true);
+    });
+
+    it("does not auto-open when the node has already been wrapped up", () => {
+      expect(shouldAutoOpenMeeting(true, true)).toBe(false);
+    });
+
+    it("never auto-opens when the step didn't actually enter the zone, wrapped or not", () => {
+      expect(shouldAutoOpenMeeting(false, false)).toBe(false);
+      expect(shouldAutoOpenMeeting(false, true)).toBe(false);
     });
   });
 });

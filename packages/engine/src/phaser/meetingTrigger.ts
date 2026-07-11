@@ -1,5 +1,6 @@
 import type { Point, RoomTemplate } from "./templates";
 import { TILE } from "./templates";
+import type { SessionMode } from "../state/session";
 
 // Pure helpers for the walk-up meeting trigger (Task 1.6), extracted out of
 // WorldScene so the "did we just enter the zone" / "are we facing the table"
@@ -24,6 +25,41 @@ export function isFacingTable(tpl: RoomTemplate, facingTx: number, facingTy: num
 /** Assembles the `encounter:meeting:start` payload from the venue's seated actors. */
 export function meetingStartPayload(seatedActorIds: string[]): { actorIds: string[] } {
   return { actorIds: [...seatedActorIds] };
+}
+
+// Final review (C1): one-frame race between fireMeetingStart (fired from a tween
+// onComplete, which Phaser's Systems.step runs BEFORE scene.update() in the very same
+// frame — see node_modules/phaser/src/scene/Systems.js) and the world:freeze bus event
+// that would otherwise block further input (React's effect flush lands strictly after
+// this frame). A Space press/release latched mid-tween (interactQueued) survives into
+// this same frame's update() and can re-fire interact() right after the meeting opens,
+// hitting the now-seated actor's tile (or the isFacingTable branch) and throwing through
+// GameSession's roaming-only guards (startEncounterWith/startMeeting). Belt-and-suspenders
+// fix: WorldScene.fireMeetingStart() clears interactQueued (and resets the key) directly,
+// AND interact() no-ops outright whenever a meeting is already active — this predicate is
+// the second half, kept here as a pure/testable seam since WorldScene itself has no
+// dedicated unit tests (Phaser can't run under jsdom/vitest).
+//
+// Deliberately meeting-only, not "not roaming": `session.mode()` reports "traversing"
+// (not "roaming") whenever a walking traversal is pending, but the player is still plain
+// roaming underneath — route NPCs, fact orbs, and doors must all stay interactable while
+// traversing, so this must NOT suppress interact() there.
+export function suppressesInteract(mode: SessionMode): boolean {
+  return mode === "meeting";
+}
+
+// Final review (C2): the AUTOMATIC walk-up-to-the-table trigger (WorldScene.stepTo's
+// tween onComplete, on the zone-entry edge) must not silently re-open a meeting whose
+// node has already been wrapped up — leaving and re-entering the venue, or walking back
+// into a completed node's venue mid-traversal (the old venue stays in the walkable
+// union), would otherwise re-fire `encounter:meeting:start` and, through App's handler,
+// re-run WRAP UP's SUBMIT_FOR_GRADING for the same node a second time. The OTHER call
+// site of fireMeetingStart — interact()'s isFacingTable branch, a deliberate Space press
+// while facing the table — is a manual re-open the player can always choose, and is NOT
+// gated by this (see WorldScene.ts's interact(), which calls fireMeetingStart directly,
+// unguarded by wrapped state).
+export function shouldAutoOpenMeeting(enteredZone: boolean, alreadyWrappedUp: boolean): boolean {
+  return enteredZone && !alreadyWrappedUp;
 }
 
 // Deterministic NPC tile assignment (review fix, Task 1.6): the old

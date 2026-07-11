@@ -4,7 +4,16 @@ import type { EventBus } from "../bridge/events";
 import { resolvePlacement, resolveSeating } from "../state/placement";
 import { getTemplate, TILE, TILE_SIZE, type RoomTemplate } from "./templates";
 import { generatePlaceholderTextures } from "./textures";
-import { isTriggerZoneTile, enteredTriggerZone, isFacingTable, meetingStartPayload, assignNpcTiles, assignFactTiles } from "./meetingTrigger";
+import {
+  isTriggerZoneTile,
+  enteredTriggerZone,
+  isFacingTable,
+  meetingStartPayload,
+  assignNpcTiles,
+  assignFactTiles,
+  suppressesInteract,
+  shouldAutoOpenMeeting,
+} from "./meetingTrigger";
 
 const MOVE_DURATION_MS = 220;
 
@@ -305,7 +314,16 @@ export class WorldScene extends Phaser.Scene {
         // Re-check `frozen` at completion time, not just at step-start: an
         // overlay can freeze the world mid-tween, and world:freeze discipline
         // means no fresh encounter should open once the world is frozen.
-        if (!this.frozen && enteredTriggerZone(wasInZone, this.inTriggerZone)) this.fireMeetingStart();
+        //
+        // C2 fix (final review): the AUTOMATIC zone-entry trigger must not re-open a
+        // meeting whose node has already been wrapped up (leave/re-enter, or walking
+        // back into a completed node's venue mid-traversal) — see
+        // shouldAutoOpenMeeting's doc comment. The MANUAL Space-at-table path
+        // (interact()'s isFacingTable branch) calls fireMeetingStart directly and is
+        // NOT gated by this — a deliberate re-open always stays available.
+        const entered = enteredTriggerZone(wasInZone, this.inTriggerZone);
+        const alreadyWrapped = this.session.hasWrappedUp(this.session.currentNode().id);
+        if (!this.frozen && shouldAutoOpenMeeting(entered, alreadyWrapped)) this.fireMeetingStart();
       },
     });
   }
@@ -321,10 +339,30 @@ export class WorldScene extends Phaser.Scene {
   // never have zero participants by design, so no-op here instead of ever emitting one.
   private fireMeetingStart(): void {
     if (this.seatedActorIds.length === 0) return;
+    // C1 fix (final review): a Space press/release latched mid-tween (interactQueued)
+    // can survive into THIS SAME Phaser frame's upcoming update() call — this method
+    // fires from a tween onComplete, which Phaser runs strictly before scene.update()
+    // in the same step, well before React's world:freeze effect has any chance to
+    // flush. Clear the latch (and reset Phaser's own key state, mirroring the
+    // world:freeze handler above) here so update()'s `if (this.interactQueued)` branch
+    // doesn't re-fire interact() moments after this meeting opens, hitting the
+    // now-seated actor's tile and throwing through GameSession's roaming-only guards.
+    // Belt-and-suspenders alongside interact()'s own suppressesInteract guard below.
+    this.interactQueued = false;
+    this.interactKey.reset();
     this.bus.emit("encounter:meeting:start", meetingStartPayload(this.seatedActorIds));
   }
 
   private interact(): void {
+    // C1 fix (final review): the other half of the interactQueued-race
+    // belt-and-suspenders fix — no-op outright once a meeting is already active, so
+    // even an interact that slips past fireMeetingStart's own latch-clear (e.g. a
+    // fresh JustDown edge landing in the same frame) can't reach
+    // startEncounterWith/startMeeting's roaming-only guards. See
+    // meetingTrigger.ts's suppressesInteract doc comment for why this is
+    // meeting-only, not "not roaming" (route NPCs/doors must stay interactable while
+    // traversing).
+    if (suppressesInteract(this.session.mode())) return;
     const { dx, dy } = DIRECTION_DELTA[this.facing];
     const ftx = this.tx + dx, fty = this.ty + dy;
     const target = this.interactables.find((it) => it.tx === ftx && it.ty === fty);

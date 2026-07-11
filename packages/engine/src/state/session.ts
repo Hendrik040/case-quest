@@ -57,6 +57,15 @@ export class GameSession {
   // speaker (meetingSetActive) and asks any open topic of any participant (meetingAsk).
   private meetingParticipants: string[] = [];
   private meetingActiveActorId: string | null = null;
+  // Final review (C2): tracks which nodes' meetings have already been wrapped up, so the
+  // host-submit seam (App.tsx) can guard `onSceneWrapUp` to fire at most once per node —
+  // re-opening and re-wrapping a meeting at the SAME node stays fully allowed (standalone
+  // re-chat is by design; see meetingWrapUp's own doc comment), only the platform submit
+  // is deduplicated. WorldScene.stepTo's AUTOMATIC zone-entry trigger also consults this
+  // (via hasWrappedUp) to stop auto-reopening a wrapped node on mere zone re-entry; the
+  // manual Space-at-table re-open stays available regardless (see meetingTrigger.ts's
+  // shouldAutoOpenMeeting doc comment).
+  private readonly wrappedNodeIds = new Set<string>();
 
   // Traversal sub-state (M5 spatial progression): set by chooseOption when the next node
   // has a venue-typed location. The player keeps walking within the COMPLETED node's world
@@ -321,12 +330,25 @@ export class GameSession {
     this.meetingActiveActorId = actorId;
   }
 
-  meetingWrapUp(): void {
+  // Final review (C2): returns `firstWrap` so callers (App.tsx's host-submit seam) can
+  // tell a genuinely-first wrap-up (fire onSceneWrapUp) apart from a re-wrap of an
+  // already-wrapped node (suppress the duplicate platform SUBMIT_FOR_GRADING) — wrapping
+  // up itself is always allowed regardless (standalone re-chat/re-wrap is by design; only
+  // the host submit is deduplicated, at the call site that owns the platform callback).
+  meetingWrapUp(): { firstWrap: boolean } {
     this.assertActive();
     if (this.internalMode !== "meeting") throw new Error("no meeting in progress");
+    const firstWrap = !this.wrappedNodeIds.has(this.currentNodeId);
+    this.wrappedNodeIds.add(this.currentNodeId);
     this.internalMode = "roaming";
     this.meetingParticipants = [];
     this.meetingActiveActorId = null;
+    return { firstWrap };
+  }
+
+  /** Whether `nodeId`'s meeting has already been wrapped up at least once (C2). */
+  hasWrappedUp(nodeId: string): boolean {
+    return this.wrappedNodeIds.has(nodeId);
   }
 
   pollDecisionPrompt(): boolean {

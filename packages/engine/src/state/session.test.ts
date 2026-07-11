@@ -302,6 +302,46 @@ describe("GameSession — meeting machine (multi-party)", () => {
     expect(s.isFactGathered("fact_capacity")).toBe(true); // survives wrap-up
   });
 
+  // Final review (C2): no once-per-node wrap-up idempotency meant a re-opened venue
+  // meeting could re-fire onSceneWrapUp's host submit (duplicate SUBMIT_FOR_GRADING)
+  // for the same node. GameSession now tracks wrapped-node state itself so the host
+  // seam (App.tsx) can gate on it, while standalone re-chat/re-wrap keeps working.
+  describe("meetingWrapUp / hasWrappedUp (C2 — once-per-node host-submit idempotency)", () => {
+    it("hasWrappedUp is false before any wrap-up, for any node", () => {
+      const s = newSession();
+      expect(s.hasWrappedUp(s.currentNode().id)).toBe(false);
+    });
+
+    it("meetingWrapUp reports firstWrap:true the first time a node is wrapped", () => {
+      const s = newSession();
+      s.startMeeting(["roaster", "buyer"]);
+      const result = s.meetingWrapUp();
+      expect(result).toEqual({ firstWrap: true });
+      expect(s.hasWrappedUp(s.currentNode().id)).toBe(true);
+    });
+
+    it("re-opening and re-wrapping the SAME node reports firstWrap:false the second time, but is still allowed (standalone re-chat stays available)", () => {
+      const s = newSession();
+      s.startMeeting(["roaster", "buyer"]);
+      expect(s.meetingWrapUp()).toEqual({ firstWrap: true });
+
+      // Standalone re-chat: starting a new meeting at the SAME (already-wrapped) node
+      // must still be allowed — only the host-submit guard (App.tsx) cares about
+      // firstWrap, not GameSession.startMeeting itself.
+      expect(() => s.startMeeting(["roaster", "buyer"])).not.toThrow();
+      const result = s.meetingWrapUp();
+      expect(result).toEqual({ firstWrap: false });
+      expect(s.hasWrappedUp(s.currentNode().id)).toBe(true);
+    });
+
+    it("hasWrappedUp is per-node: an unrelated node id (or one never visited) stays false", () => {
+      const s = newSession();
+      s.startMeeting(["roaster", "buyer"]);
+      s.meetingWrapUp();
+      expect(s.hasWrappedUp("some-other-node-never-wrapped")).toBe(false);
+    });
+  });
+
   it("meetingAsk/meetingSetActive/meetingWrapUp throw when no meeting is in progress", () => {
     const s = newSession();
     expect(() => s.meetingAsk("roaster", "fact_capacity")).toThrow();
