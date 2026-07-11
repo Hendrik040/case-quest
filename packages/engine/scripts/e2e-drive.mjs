@@ -7,6 +7,8 @@
 //
 //   while mode() !== "debrief":
 //     - an encounter on screen  -> exhaust every unasked topic, then MOVE ON
+//     - a meeting on screen     -> exhaust every seated participant's topics
+//                                  (+ once per run, exercise SAY), then WRAP UP
 //     - a decision prompt       -> enter it (DECIDE NOW)
 //     - a decision encounter    -> pick the FIRST option (deterministic),
 //                                  confirm YES, submit a generic reasoning line
@@ -38,18 +40,30 @@
 //    mid-traversal, the next node's locations) instead of the current
 //    node's `accessible_locations` alone, so it can route through a scene's
 //    route locations and all the way to the next node's venue.
-//  - a real, confirmed engine race condition (documented in the Task 5.2
-//    report, not fixed here): entering a `boardroom` venue starts BOTH the
-//    legacy per-actor auto-chain (`maybeStartChain`, on App's 1200ms
-//    CHAIN_CHECK_DELAY_MS timer) and the new walk-up meeting trigger as two
-//    independent, unreconciled mechanisms — whichever fires first wins, and
-//    passively waiting (the old `waitForOverlayOrSettle`-only behavior)
-//    always loses that race to the timer. `rushToTriggerZoneIfAny` wins it
-//    back by walking the player onto a triggerZone tile the instant a new
-//    room is entered, well under 1200ms. It's a no-op for every other
-//    template (shopfront/warehouse/client_site's DEFAULT_TEMPLATE fallback
-//    have no triggerZone at all today), so those venues are only ever
-//    playable via the legacy auto-chain — see the report.
+//  - Post Task-5.2-review engine fixes (all three of the report's "found but
+//    not fixed" bugs have since been fixed in the engine itself, not worked
+//    around here):
+//      B1: `GameSession.maybeStartChain` now returns null at any venue
+//          location with >=1 seated actor, so the legacy per-actor
+//          auto-chain no longer races the walk-up meeting trigger for the
+//          same room entry — the meeting is unconditionally THE way a venue
+//          opens now. `walkOntoMeetingTriggerZone` (formerly
+//          `rushToTriggerZoneIfAny`, back when this was a race to win under
+//          1200ms) is no longer dodging anything; it's simply how the
+//          driver walks onto a venue's trigger tile the same way a human
+//          player would, on first sight of the room.
+//      B2: every venue-capable template (`boardroom`, `street`, `shopfront`,
+//          `client_site`) now has real, walkable `triggerZone` geometry —
+//          `client_site` also got its own dedicated template instead of
+//          falling back to the generic, trigger-less DEFAULT_TEMPLATE. All
+//          four of this world's venues (2 boardrooms, 1 shopfront, 1
+//          client_site) are reachable through the meeting overlay now, not
+//          just the two boardrooms.
+//      B3: fact-orb placement is collision-aware (no more landing an orb on
+//          a seated NPC's tile in overflow) — not directly exercised by this
+//          driver (`roamingAction`'s orb branch already worked around the
+//          old bug by reading gathered-state, not screen position), but
+//          worth knowing the underlying geometry is sound now too.
 //
 // Usage:
 //   pnpm -C packages/engine dev &            # dev server must already be up
@@ -58,6 +72,9 @@
 //   CQ_WORLD_URL=/worlds/other.world.json pnpm -C packages/engine e2e
 //                                             # drive a different world; unset,
 //                                             # behavior is unchanged.
+//   CQ_EXPECT_MEETINGS=4 CQ_WORLD_URL=/worlds/case3-m5.world.json pnpm -C packages/engine e2e
+//                                             # additionally assert the exact number of
+//                                             # "meeting" overlays driven; unset, no assertion.
 //
 // Hard-won rules baked into the helpers below (see README's "e2e" section):
 //  - Launch real installed Chrome (`channel: "chrome"`) — no bundled Chromium
@@ -88,6 +105,14 @@ const BASE_URL = process.env.CQ_E2E_URL ?? "http://localhost:5173";
 const CQ_WORLD_URL = process.env.CQ_WORLD_URL;
 const GOTO_URL = CQ_WORLD_URL ? `${BASE_URL}?world=${encodeURIComponent(CQ_WORLD_URL)}` : BASE_URL;
 const SMOKE = process.argv.includes("--smoke");
+// Optional hard assertion (kept world-agnostic like everything else here — unset by
+// default, so the M4 toy world's run is unaffected): the exact number of "meeting" overlay
+// encounters (`runMeetingTurn` calls) the whole playthrough must drive through. Set this
+// when a world's meeting-count is known (e.g. case3-m5.world.json's 4 venues) so a
+// regression that silently falls back to the legacy per-actor chain somewhere — the exact
+// failure mode the Task 5.2 review fixed (B1/B2) — fails the run loudly instead of merely
+// not being screenshotted.
+const CQ_EXPECT_MEETINGS = process.env.CQ_EXPECT_MEETINGS !== undefined ? Number(process.env.CQ_EXPECT_MEETINGS) : null;
 
 // Hard cap on strategy-loop iterations (each iteration dispatches one action:
 // an encounter turn, an orb pickup, a door transit, an overlay advance, ...).
@@ -642,41 +667,47 @@ async function roamingAction(page, visitedRooms) {
 }
 
 /**
- * M5 (Task 5.2) — win a real, confirmed engine race: entering a `boardroom`
- * venue starts BOTH the legacy per-actor auto-chain (`maybeStartChain`, on
- * App's 1200ms CHAIN_CHECK_DELAY_MS timer) and the new walk-up meeting
- * trigger (`WorldScene`'s triggerZone) — two independent, unreconciled
- * mechanisms racing each other. Passively waiting (the old
- * `waitForOverlayOrSettle`-only behavior) always loses to the timer, since
- * the timer fires unconditionally while a human/driver is still deciding
- * where to walk. Winning instead just requires acting fast: walk the player
- * onto a triggerZone tile the instant a new room is entered, well under
- * 1200ms (a single `walkStep` plus a screenshot comfortably clears it).
+ * M5 (Task 5.2, updated post-review-fixes) — the way into a venue's
+ * multi-party meeting: walk onto one of the room template's `triggerZone`
+ * tiles, exactly as a human player would. Before the B1/B2 engine fixes this
+ * had to *race* the legacy per-actor auto-chain's 1200ms timer (hence the
+ * old name, `rushToTriggerZoneIfAny`); now `maybeStartChain` unconditionally
+ * suppresses the auto-chain at any venue with a seated actor (B1), so
+ * there's no race left to win — this just needs to happen at all, on first
+ * sight of the room, so the meeting opens instead of the room sitting idle
+ * in plain "roaming" forever (nothing else will open it automatically).
  *
- * A no-op (returns false immediately) for any room whose template has no
- * triggerZone at all — which, per `templates.ts` today, is every template
- * except `boardroom` (`shopfront`/`warehouse`/`client_site`'s
- * DEFAULT_TEMPLATE fallback all have empty `triggerZone` arrays and no
- * `TABLE` tiles for `isFacingTable` either) — so those venues can only ever
- * be played through the legacy auto-chain. See the Task 5.2 report.
+ * Every venue-capable template (`boardroom`, `street`, `shopfront`,
+ * `client_site`) has real triggerZone geometry now (B2) — including
+ * `street`, which most of this world's non-venue ROUTE locations also use.
+ * A non-empty `triggerZone` therefore no longer means "this is a venue" —
+ * gate on `getSeatedActorIds()` (empty unless this location IS the current
+ * node's venue, per `resolveSeating`) instead, or the driver would try to
+ * walk onto a trigger zone at a plain route stop too: that would accomplish
+ * nothing (`fireMeetingStart` no-ops with zero seated actors) and risks
+ * colliding with that room's own legitimate legacy auto-chain timer for its
+ * route NPC (B1 only suppresses the auto-chain where there ARE seated
+ * actors, i.e. at the venue).
  */
-async function rushToTriggerZoneIfAny(page) {
+async function walkOntoMeetingTriggerZone(page) {
   const zone = await page.evaluate(() => window.__cqScene.getTriggerZoneTiles());
   if (!zone || zone.length === 0) return false;
 
+  const seatedActorIds = await page.evaluate(() => window.__cqScene.getSeatedActorIds());
+  if (!seatedActorIds || seatedActorIds.length === 0) return false;
+
   // Defensive: this world's topology never re-enters a venue room after its meeting
   // wraps up, but GameSession.startMeeting() has no "already met" guard of its own —
-  // only rush onto the trigger zone while some seated actor here still has an open,
+  // only walk onto the trigger zone while some seated actor here still has an open,
   // ungathered topic, so a hypothetical revisit can't re-open a finished meeting.
-  const stillOpen = await page.evaluate(() => {
+  const stillOpen = await page.evaluate((ids) => {
     const s = window.__cqSession;
     const node = s.currentNode();
-    return window.__cqScene.getInteractables().some((it) => {
-      if (it.kind !== "actor") return false;
-      const actor = s.world().actors.find((a) => a.id === it.id);
+    return ids.some((id) => {
+      const actor = s.world().actors.find((a) => a.id === id);
       return (actor?.knowledge ?? []).some((f) => node.available_facts.includes(f) && !s.isFactGathered(f));
     });
-  });
+  }, seatedActorIds);
   if (!stillOpen) return false;
 
   const grid = await getRoomGrid(page);
@@ -793,15 +824,17 @@ async function main() {
       continue;
     }
 
-    // Roaming with no overlay. On first sight of a room, race the legacy
-    // auto-chain to any meeting triggerZone (see `rushToTriggerZoneIfAny`),
-    // then give the auto-chain check time to fire before walking anywhere.
+    // Roaming with no overlay. On first sight of a room, walk onto any
+    // meeting triggerZone (see `walkOntoMeetingTriggerZone` — B1/B2 fixes
+    // mean this is simply how a venue's meeting opens now, not a race to
+    // win), then give the (non-venue) legacy auto-chain time to fire before
+    // walking anywhere.
     const roomKey = `${state.nodeId}:${state.locationId}`;
     if (roomKey !== lastRoomKey) {
       lastRoomKey = roomKey;
       visitedRooms.add(roomKey);
       await shot(page, `roaming-${state.locationId}`);
-      await rushToTriggerZoneIfAny(page);
+      await walkOntoMeetingTriggerZone(page);
       const settled = await waitForOverlayOrSettle(page);
       if (anyOverlay(settled)) continue;
     }
@@ -814,18 +847,23 @@ async function main() {
   }
 
   const mode = await sessionMode(page);
-  console.log(`final mode: ${mode}`);
+  console.log(`final mode: ${mode}, meetings driven: ${meetingsSeen}`);
   if (consoleErrors.length) {
     console.log("PAGE ERRORS:\n" + consoleErrors.join("\n"));
   }
 
   await browser.close();
 
-  if (mode !== "debrief" || consoleErrors.length) {
-    console.error(`PLAYTHROUGH FAILED -- mode=${mode}, ${consoleErrors.length} page errors`);
+  const meetingsMismatch = CQ_EXPECT_MEETINGS !== null && meetingsSeen !== CQ_EXPECT_MEETINGS;
+  if (meetingsMismatch) {
+    console.error(`MEETING ASSERTION FAILED -- expected ${CQ_EXPECT_MEETINGS} meetings, drove ${meetingsSeen}`);
+  }
+
+  if (mode !== "debrief" || consoleErrors.length || meetingsMismatch) {
+    console.error(`PLAYTHROUGH FAILED -- mode=${mode}, ${consoleErrors.length} page errors, meetings=${meetingsSeen}`);
     process.exit(1);
   }
-  console.log(`PLAYTHROUGH COMPLETE -- mode=${mode}, ${consoleErrors.length} page errors`);
+  console.log(`PLAYTHROUGH COMPLETE -- mode=${mode}, ${consoleErrors.length} page errors, meetings=${meetingsSeen}`);
   process.exit(0);
 }
 

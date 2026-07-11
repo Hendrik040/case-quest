@@ -133,6 +133,23 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /**
+   * Dev/test helper (M5 Task 5.2 review, B2 follow-up): the current node's
+   * seated actor ids AT THIS location (`resolveSeating`, empty unless this
+   * location IS the node's venue — see `placement.ts`). Distinguishes "this
+   * room has a walkable triggerZone" (true for every venue-capable template
+   * now, per B2) from "this room is actually a venue with participants right
+   * now" (only true where a meeting can genuinely open — `fireMeetingStart`
+   * no-ops otherwise). An external driver needs this to avoid trying to walk
+   * onto a trigger zone at an ordinary route location that merely happens to
+   * share a venue-capable template type (e.g. a `street`-typed route hop),
+   * which would accomplish nothing there and risks colliding with that
+   * room's own legitimate legacy auto-chain timer.
+   */
+  getSeatedActorIds(): string[] {
+    return [...this.seatedActorIds];
+  }
+
+  /**
    * Dev/test helper: a blocked/walkable snapshot of the current room, sized
    * to the active template — lets an external driver (e.g. the e2e script)
    * do its own pathfinding without hardcoding template geometry.
