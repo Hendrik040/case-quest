@@ -68,10 +68,26 @@ export function resolveSeating(
   return { seatedActorIds };
 }
 
+/**
+ * `walkableIds`, if given, overrides the accessible∪route default used to filter a
+ * location's exits down to valid doorTargets. Review fix (M5 Task 5.1 review): the
+ * doorTargets computation used to filter exits against `node.accessible_locations`
+ * alone, silently dropping any exit into a `route_location` — the same
+ * accessible∪route union `homeLocationForActor` already applies (see its doc comment
+ * and the three-way parity mirror above) is required here too, or a route-only exit
+ * (e.g. a boardroom whose sole exit is a street) renders zero doors and the player can
+ * never leave. Callers that need the SESSION's actual (traversal-extended) walkable
+ * set — which can reach beyond this single node's own accessible∪route locations,
+ * e.g. mid-traversal into the next node's other accessible_locations — pass it
+ * explicitly (see `WorldScene.renderLocation`, which passes
+ * `GameSession.accessibleLocations()`); this keeps `resolvePlacement` a pure function
+ * of its explicit inputs rather than reaching into session/traversal state itself.
+ */
 export function resolvePlacement(
   world: World,
   node: StoryNode,
   locationId: string,
+  walkableIds?: string[],
 ): { npcIds: string[]; factSpotIds: string[]; doorTargets: string[] } {
   const venue = venueLocationId(world, node);
   const npcIds =
@@ -85,8 +101,8 @@ export function resolvePlacement(
   });
 
   const location = world.locations.find((l) => l.id === locationId);
-  const accessible = new Set(node.accessible_locations);
-  const doorTargets = (location?.exits ?? []).filter((t) => accessible.has(t) && t !== locationId);
+  const walkable = new Set(walkableIds ?? [...node.accessible_locations, ...(node.route_locations ?? [])]);
+  const doorTargets = (location?.exits ?? []).filter((t) => walkable.has(t) && t !== locationId);
 
   return { npcIds, factSpotIds, doorTargets };
 }

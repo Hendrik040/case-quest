@@ -1,0 +1,527 @@
+{
+  "schema_version": "0.2",
+  "meta": {
+    "case_id": "kaskazi-network-ltd-distributing-to-the-bottom-of-the-pyramid-m5",
+    "title": "KasKazi Network Ltd – Distributing to the Bottom of the Pyramid",
+    "synopsis": "You are Ng'ang'a Wanjohi, CEO of KasKazi Network Ltd, finalizing the business plan for a bicycle-borne distribution network aimed at Kenya's 100,000-kiosk 'mass market' — 75% of the country's retail trade, worth Ksh 7.5 billion a month, and served by no organized system at all. Walk the plan from your office, where Hussein Bakari has the operational numbers, out through Kawangware market where suppliers and your old industry contact Judy argue about who should really pay for this, on to a wholesaler's warehouse to bring him into the network, and finally back to KasKazi's new offices to commit to a model: who the paying client is, how Bicycle Sales Representatives are hired and protected against theft, and whether the client relationships will last.",
+    "protagonist_actor_id": "actor-wanjohi",
+    "start_node_id": "node-kaskazi-office",
+    "source_ref": "IMD-3-2016 KasKazi Network Ltd – Distributing to the Bottom of the Pyramid (A), and IMD-3-2016-T teaching note (Cases A/B/C + video transcript).",
+    "provenance": {
+      "pipeline_version": "hand-authored-m5-showcase",
+      "extraction_model": "hand-authored (Task 5.1, Case Quest M5 meeting-encounters build)",
+      "generated_at": "2026-07-11"
+    }
+  },
+  "learning_objectives": [
+    {
+      "id": "lo-1",
+      "text": "Analyze why Kenya's fragmented 'mass market' — 100,000 kiosks, 75% of retail, Ksh 7.5 billion a month — is large but neglected, and what that implies about the opportunity."
+    },
+    {
+      "id": "lo-2",
+      "text": "Evaluate the KasKazi business model against the needs of each stakeholder in the value chain (FMCG manufacturers, wholesalers, kiosks) and identify who the 'natural,' paying client actually is."
+    },
+    {
+      "id": "lo-3",
+      "text": "Design a Bicycle Sales Representative recruitment and incentive system — including a personal-guarantor requirement — that manages the cash-and-stock theft risk inherent to a distributed sales force."
+    },
+    {
+      "id": "lo-4",
+      "text": "Assess how imitable the KasKazi concept is, and identify the entry barriers (mapping IP, routing systems, BSR retention) worth investing in."
+    },
+    {
+      "id": "lo-5",
+      "text": "Recommend a client-engagement strategy that avoids the seasonal 'dry spell' risk of short-term promotions in favor of durable, long-term partnerships."
+    }
+  ],
+  "actors": [
+    {
+      "id": "actor-wanjohi",
+      "name": "Ng'ang'a Wanjohi",
+      "role": "protagonist",
+      "is_playable": true,
+      "persona": {
+        "background": "You are Ng'ang'a Wanjohi, CEO of KasKazi Network Ltd. Third of four children, raised in suburban Nairobi by a school-principal mother, you always knew you'd rather build something of your own than take a nine-to-five job. Two failed start-ups — Leap Marketing Communications, then a near-miss with the Pamoja Distribution Network — taught you how the low-income 'mass market' really works. Now you're finalizing the business plan for KasKazi Network: bicycle-borne distribution to the 100,000 kiosks everyone else has written off.",
+        "personality": "Determined, curious about the ground truth, allergic to repeating his own mistakes.",
+        "communication_style": "Direct, numbers-first, quotes the people he's talked to."
+      },
+      "goals": [
+        "Finalize a KasKazi business plan that actually works at scale",
+        "Learn from Leap and Pamoja's failures instead of repeating them",
+        "Decide who KasKazi's real paying client is"
+      ],
+      "knowledge": []
+    },
+    {
+      "id": "actor-hussein",
+      "name": "Hussein Bakari",
+      "role": "npc",
+      "is_playable": false,
+      "persona": {
+        "background": "Hussein Bakari is Wanjohi's close friend and KasKazi's Operations Manager — 'he does everything,' as Wanjohi puts it: day-to-day targets, recruitment, HR, strategy. He and Wanjohi went kiosk to kiosk together counting outlets, one at a time, before either of them wrote a business plan.",
+        "personality": "agreeableness: 7/10, conscientiousness: 8/10, extraversion: 6/10, neuroticism: 5/10, openness: 7/10",
+        "communication_style": "Practical and operational — talks in headcounts, routes, and cycle-days."
+      },
+      "goals": [
+        "Build a BSR force KasKazi can actually trust with cash and stock",
+        "Keep recruitment and training disciplined as the network scales",
+        "Support Wanjohi in finalizing the business plan"
+      ],
+      "knowledge": [
+        "fact-market-opportunity",
+        "fact-storming-failure",
+        "fact-bsr-hiring-criteria",
+        "fact-bsr-coverage-math",
+        "fact-bsr-compensation-package",
+        "fact-imitability-routing-ip"
+      ],
+      "dialogue": {
+        "greeting": "Ng'ang'a. Before we go any further, let's make sure the numbers actually hold up.",
+        "topics": [
+          { "fact_id": "fact-market-opportunity", "line": "100,000 kiosks, 75% of the retail market, Ksh 7.5 billion moving through them every month — and no one's organized to reach them. That's the whole opportunity in one sentence." },
+          { "fact_id": "fact-storming-failure", "line": "Remember Golden Biscuits. We stormed the market on foot, kiosk owners had no morning cash to pay us, and by the time we circled back the cartels had already squeezed us out. We are not doing that again." },
+          { "fact_id": "fact-bsr-hiring-criteria", "line": "Every BSR needs O-levels, can ride a bike, has a national ID — and finds someone employed to guarantee Ksh 15,000 against him disappearing with the goods. No guarantor, no bicycle." },
+          { "fact_id": "fact-bsr-coverage-math", "line": "One rep covers 40 kiosks a day. On a 12-day cycle that's 480 kiosks per rep. Divide 100,000 by that and you need something like 200 BSRs nationwide." },
+          { "fact_id": "fact-bsr-compensation-package", "line": "Retainer's 5 to 6 thousand bob, plus commission — our best rep clears 40,000 a month. Accident and hospital cover, help with a bank loan, and a real shot at becoming a district or area manager." },
+          { "fact_id": "fact-imitability-routing-ip", "line": "Mapping all 100,000 kiosks and routing every BSR's 12-day cycle took us years. Anyone can buy bicycles. Nobody rebuilds that map overnight — the real risk is someone poaching our trained reps instead." }
+        ]
+      }
+    },
+    {
+      "id": "actor-judy",
+      "name": "Judy",
+      "role": "npc",
+      "is_playable": false,
+      "persona": {
+        "background": "Judy is a friend of Wanjohi's who works the FMCG trade-marketing side of the industry — she's the one who first told him 'nobody knows about kiosks... you'll be the first, and after some time, you'll come and tell me.' Years later she still moves through Kawangware watching how brands actually perform at the shelf, and she's the clearest voice in the room on who really makes money in this value chain.",
+        "personality": "Sharp, a little wry, speaks from firsthand trade experience.",
+        "communication_style": "Blunt about margins and incentives; short on patience for wishful thinking."
+      },
+      "goals": [
+        "Make sure Wanjohi signs the client who can actually afford to pay for this",
+        "Get manufacturers the market intelligence that justifies the contract",
+        "Warn against the short-termism that already haunts the industry"
+      ],
+      "knowledge": [
+        "fact-manufacturer-natural-client",
+        "fact-wholesaler-passive",
+        "fact-manufacturer-reporting-value",
+        "fact-dry-spell-risk"
+      ],
+      "dialogue": {
+        "greeting": "Ng'ang'a. Still counting kiosks one at a time, or are we finally talking numbers that matter?",
+        "topics": [
+          { "fact_id": "fact-manufacturer-natural-client", "line": "A kiosk's margin is nothing, a wholesaler's isn't much better. FMCG manufacturers run two, three times that — Unga alone clears 31%. They're the ones who can actually afford to pay you, and the ones who gain the most when you reach one more kiosk." },
+          { "fact_id": "fact-wholesaler-passive", "line": "Most wholesalers just sit there waiting for a walk-in order. Coca-Cola's the exception — they run their own container wholesalers and push stock out by bicycle. Don't build a business plan assuming everyone else will do that." },
+          { "fact_id": "fact-manufacturer-reporting-value", "line": "What you're really selling a manufacturer is intelligence: volume by outlet, where their brand is strong or weak, a success rate per product, and counterfeits traced back to source. The bicycles are just how you collect it." },
+          { "fact_id": "fact-dry-spell-risk", "line": "Watch this: most of these clients will want a three-to-six-month promotion, not a real partnership. Your costs don't go away between contracts. That gap is where you'll bleed." }
+        ]
+      }
+    },
+    {
+      "id": "actor-mama-wanjiru",
+      "name": "Mama Wanjiru",
+      "role": "npc",
+      "is_playable": false,
+      "persona": {
+        "background": "Mama Wanjiru ran a Kawangware kiosk for years before saving up to open her own mini-supermarket — 'I was a kiosk owner once,' she says, 'now I don't pay rent, I own this building.' She still deals daily with kiosk owners who come to her to break bulk when their own wholesaler doesn't stock what a customer needs.",
+        "personality": "Warm but pragmatic; proud of having moved up from kiosk to mini-supermarket.",
+        "communication_style": "Concrete, told through her own daily numbers."
+      },
+      "goals": [
+        "Keep prices low enough to pull in customers from the kiosks",
+        "Avoid the theft risk that comes with running a cash, self-service store",
+        "Explain the mass market to anyone who'll actually listen"
+      ],
+      "knowledge": [
+        "fact-mass-market-basics",
+        "fact-bulk-breaking",
+        "fact-mini-supermarket-economics"
+      ],
+      "dialogue": {
+        "greeting": "Come in, come in — you're the one asking about kiosks and bicycles?",
+        "topics": [
+          { "fact_id": "fact-mass-market-basics", "line": "A kiosk sees 50 to 100 people a day, average basket maybe Ksh 50, up to 150 on a good day — like month-end. When someone's short, you extend credit on trust. Default on that and the whole neighborhood knows your name." },
+          { "fact_id": "fact-bulk-breaking", "line": "Nobody buys a pack of 20 cigarettes for Ksh 100 here — we sell them one stick at a time for five bob. Sugar, cooking fat, vegetables, all the same. One meal at a time." },
+          { "fact_id": "fact-mini-supermarket-economics", "line": "Since I moved to self-service I get up to 200 customers a day, all cash — no more credit losses. But now I have to watch for theft instead. Nothing's free." }
+        ]
+      }
+    },
+    {
+      "id": "actor-koech",
+      "name": "Koech",
+      "role": "npc",
+      "is_playable": false,
+      "persona": {
+        "background": "Koech is a Bicycle Sales Representative on his morning route between the KasKazi office and Kawangware — one of the network's original hires, still riding the same 12-day cycle he was trained on.",
+        "personality": "Matter-of-fact, proud of the job.",
+        "communication_style": "Short, describes his day in exact hours."
+      },
+      "goals": [
+        "Finish the day's route without missing a kiosk",
+        "Collect what's owed from yesterday's credit sales"
+      ],
+      "knowledge": ["fact-bsr-daily-routine"],
+      "dialogue": {
+        "greeting": "Can't stop long — got forty kiosks on today's route.",
+        "topics": [
+          { "fact_id": "fact-bsr-daily-routine", "line": "I'm out by 6:20, selling till noon. From three I go back to the shops where I left stock on credit, collect what's owed by evening. Same twelve-day cycle, every cycle." }
+        ]
+      }
+    },
+    {
+      "id": "actor-newspaper-vendor",
+      "name": "Newspaper Vendor",
+      "role": "npc",
+      "is_playable": false,
+      "persona": {
+        "background": "A newspaper vendor working the back lane out of Kawangware market, selling the same papers that keep running stories on whether kiosks can survive the rise of the supermarkets.",
+        "personality": "Opinionated, likes an argument.",
+        "communication_style": "Quotes headlines."
+      },
+      "goals": [
+        "Sell today's papers",
+        "Argue that the mass market isn't going anywhere"
+      ],
+      "knowledge": ["fact-kiosk-survival-debate"],
+      "dialogue": {
+        "greeting": "Paper? Today's got another one about kiosks dying out. I don't believe a word of it.",
+        "topics": [
+          { "fact_id": "fact-kiosk-survival-debate", "line": "Every few months another headline: 'are kiosks finished?' Seventy-five percent of retail still runs through places like this. Nobody's income is changing fast enough to prove these papers right." }
+        ]
+      }
+    },
+    {
+      "id": "actor-otieno",
+      "name": "Otieno",
+      "role": "npc",
+      "is_playable": false,
+      "persona": {
+        "background": "Otieno runs a mid-sized wholesaler warehouse in Nairobi's industrial area — a family business, like most wholesalers in this market. He once turned away a distributor who wanted to sell his stock by bicycle and asked to be paid for it: 'No way, man, I won't share my money with you!' Today he runs two Bicycle Sales Representatives out of his warehouse, one on his own payroll and one supplied by KasKazi Network.",
+        "personality": "agreeableness: 5/10, conscientiousness: 6/10, extraversion: 4/10, neuroticism: 5/10, openness: 4/10 — guarded with new ideas, but not blind to a good deal once he sees the numbers.",
+        "communication_style": "Businesslike, skeptical until convinced."
+      },
+      "goals": [
+        "Keep his warehouse's stock moving without carrying dead stock",
+        "Get paid reliably for whatever he hands over",
+        "Avoid being replaced rather than supplemented"
+      ],
+      "knowledge": [
+        "fact-wholesaler-first-rejection",
+        "fact-wholesaler-deal-terms"
+      ],
+      "dialogue": {
+        "greeting": "You're the bicycle people. Sit down — tell me why this time is different.",
+        "topics": [
+          { "fact_id": "fact-wholesaler-first-rejection", "line": "First time someone pitched me this, I laughed him out the door. 'You want to sell my stock for me, on a bicycle, and you want ME to pay YOU?' No way, man. I wasn't sharing my money with anybody." },
+          { "fact_id": "fact-wholesaler-deal-terms", "line": "What changed my mind: you put a rep on my stock and you guarantee I get paid. Now I run two — one's mine, one's yours. Good business, so far." }
+        ]
+      }
+    }
+  ],
+  "locations": [
+    { "id": "loc-kaskazi-hq", "name": "KasKazi Office", "type": "office", "exits": ["loc-kaskazi-boardroom", "loc-nairobi-river-bridge"] },
+    { "id": "loc-kaskazi-boardroom", "name": "KasKazi Boardroom", "type": "boardroom", "exits": ["loc-kaskazi-hq"] },
+    { "id": "loc-nairobi-river-bridge", "name": "Nairobi River Bridge", "type": "street", "exits": ["loc-kaskazi-hq", "loc-kawangware-entrance"] },
+    { "id": "loc-kawangware-entrance", "name": "Kawangware Entrance Road", "type": "street", "exits": ["loc-nairobi-river-bridge", "loc-kawangware-market"] },
+    { "id": "loc-kawangware-market", "name": "Kawangware Market Stalls", "type": "shopfront", "exits": ["loc-kawangware-entrance", "loc-kawangware-backlane"] },
+    { "id": "loc-kawangware-backlane", "name": "Kawangware Back Lane", "type": "street", "exits": ["loc-kawangware-market", "loc-industrial-avenue"] },
+    { "id": "loc-industrial-avenue", "name": "Industrial Area Avenue", "type": "street", "exits": ["loc-kawangware-backlane", "loc-warehouse-exterior"] },
+    { "id": "loc-warehouse-exterior", "name": "Wholesaler's Warehouse Yard", "type": "warehouse", "exits": ["loc-warehouse-floor", "loc-industrial-avenue", "loc-cbd-avenue"] },
+    { "id": "loc-warehouse-floor", "name": "Wholesaler's Trading Floor", "type": "client_site", "exits": ["loc-warehouse-exterior"] },
+    { "id": "loc-cbd-avenue", "name": "CBD Avenue", "type": "street", "exits": ["loc-warehouse-exterior", "loc-modern-office"] },
+    { "id": "loc-modern-office", "name": "KasKazi Network HQ", "type": "office", "exits": ["loc-modern-boardroom", "loc-cbd-avenue"] },
+    { "id": "loc-modern-boardroom", "name": "Modern Boardroom", "type": "boardroom", "exits": ["loc-modern-office"] }
+  ],
+  "facts": [
+    {
+      "id": "fact-market-opportunity",
+      "label": "market_opportunity",
+      "content": "KasKazi's business plan targets the 100,000 kiosks that make up 75% of Kenya's retail market — representing Ksh 7.5 billion ($115 million) in sales every month — with no organized system currently reaching them.",
+      "sources": [{ "actor_id": "actor-hussein", "location_id": "loc-kaskazi-boardroom" }]
+    },
+    {
+      "id": "fact-storming-failure",
+      "label": "storming_failure",
+      "content": "Wanjohi's first venture, Leap Marketing Communications, distributed for Golden Biscuits by 'storming': hiring 10-15 casual workers to sell house to house on foot. It collapsed — kiosk owners rarely had the morning cash to pay on the spot, sellers had no time to circle back and collect, and by 1999 entrenched cartels had squeezed the business out entirely.",
+      "sources": [{ "actor_id": "actor-hussein", "location_id": "loc-kaskazi-boardroom" }]
+    },
+    {
+      "id": "fact-bsr-hiring-criteria",
+      "label": "bsr_hiring_criteria",
+      "content": "KasKazi hires Bicycle Sales Representatives (BSRs) against five criteria: O-level education, communication skills, the ability to ride a bicycle, a national ID card, and a personal guarantor — a friend or relative, employed and endorsed by their own employer, who pledges Ksh 15,000 ($227) against the BSR disappearing with cash or stock.",
+      "sources": [{ "actor_id": "actor-hussein", "location_id": "loc-kaskazi-boardroom" }]
+    },
+    {
+      "id": "fact-bsr-coverage-math",
+      "label": "bsr_coverage_math",
+      "content": "One BSR can visit about 40 kiosks a day (ten hours, roughly 15 minutes a stop). On the standard 12-day route cycle that's around 480 kiosks per rep — meaning KasKazi needs on the order of 200 BSRs to reach all 100,000 kiosks nationwide.",
+      "sources": [{ "actor_id": "actor-hussein", "location_id": "loc-kaskazi-boardroom" }]
+    },
+    {
+      "id": "fact-bsr-daily-routine",
+      "label": "bsr_daily_routine",
+      "content": "A working BSR's day: out on the road by about 6:20am, selling until noon; from 3pm he revisits the kiosks where he left stock on credit, delivering what's still owed and collecting the day's cash in the evening.",
+      "sources": [{ "actor_id": "actor-koech", "location_id": "loc-kawangware-entrance" }]
+    },
+    {
+      "id": "fact-mass-market-basics",
+      "label": "mass_market_basics",
+      "content": "A typical kiosk serves 50 to 100 customers a day with an average basket of about Ksh 50 ($0.77) — up to Ksh 150 on a good day, like month-end. When a regular customer is short on cash, the kiosk owner extends credit on trust; a defaulter risks being shamed out of the whole neighborhood.",
+      "sources": [{ "actor_id": "actor-mama-wanjiru", "location_id": "loc-kawangware-market" }]
+    },
+    {
+      "id": "fact-bulk-breaking",
+      "label": "bulk_breaking",
+      "content": "Kiosks survive by breaking bulk into amounts their customers can actually afford: a Ksh 100 pack of 20 cigarettes gets resold stick by stick at Ksh 5 each; sugar, cooking fat, and vegetables are all sold in single-meal portions.",
+      "sources": [{ "actor_id": "actor-mama-wanjiru", "location_id": "loc-kawangware-market" }]
+    },
+    {
+      "id": "fact-mini-supermarket-economics",
+      "label": "mini_supermarket_economics",
+      "content": "A mini-supermarket can pull up to 200 cash-paying customers a day with none of a kiosk's credit losses — but it's a bigger target for theft, since self-service means the owner can't watch every customer the way a kiosk's small service window allows.",
+      "sources": [{ "actor_id": "actor-mama-wanjiru", "location_id": "loc-kawangware-market" }]
+    },
+    {
+      "id": "fact-manufacturer-natural-client",
+      "label": "manufacturer_natural_client",
+      "content": "Retail and wholesale margins in this market are razor-thin — maybe 10% or less for a kiosk's product mix, 5-10% for a typical wholesaler. FMCG manufacturers run two to three times that (Unga, a major Kenyan flour producer, clears 31%; Western peers like Kellogg's and Nestlé run 40-50%) and gain the most from every extra kiosk reached — which makes them, not the wholesalers, KasKazi's natural paying client.",
+      "sources": [{ "actor_id": "actor-judy", "location_id": "loc-kawangware-market" }]
+    },
+    {
+      "id": "fact-wholesaler-passive",
+      "label": "wholesaler_passive",
+      "content": "Most wholesalers in this market are small, passive family businesses that simply wait for walk-in orders from kiosks. A few exceptions — Coca-Cola runs its own container-based wholesalers on the edges of low-income areas — proactively push stock out to kiosks by bicycle or van, but that's the exception, not the rule.",
+      "sources": [{ "actor_id": "actor-judy", "location_id": "loc-kawangware-market" }]
+    },
+    {
+      "id": "fact-kiosk-survival-debate",
+      "label": "kiosk_survival_debate",
+      "content": "Local papers keep running stories asking whether kiosks can survive the rise of supermarkets. Wanjohi treats it as background noise: kiosks and the informal mass market still hold 75% of Kenya's retail trade, and nobody's standard of living is about to change fast enough to shrink that any time soon.",
+      "sources": [{ "actor_id": "actor-newspaper-vendor", "location_id": "loc-kawangware-backlane" }]
+    },
+    {
+      "id": "fact-wholesaler-first-rejection",
+      "label": "wholesaler_first_rejection",
+      "content": "Early on, when a distributor first offered to sell a wholesaler's stock by bicycle and asked to be paid for the service, most just laughed him out of the shop: 'Come and see this man — he wants to help us sell our products and he's asking us to pay him for it! No way, man, I won't share my money with you.'",
+      "sources": [{ "actor_id": "actor-otieno", "location_id": "loc-warehouse-floor" }]
+    },
+    {
+      "id": "fact-wholesaler-deal-terms",
+      "label": "wholesaler_deal_terms",
+      "content": "What changes a wholesaler's mind: KasKazi dedicates a Bicycle Sales Representative to move his stock faster and guarantees he gets paid for it. Many now run a KasKazi BSR alongside their own — 'I have two sales representatives. One is under KasKazi, the other I employ myself.'",
+      "sources": [{ "actor_id": "actor-otieno", "location_id": "loc-warehouse-floor" }]
+    },
+    {
+      "id": "fact-dead-stock-risk",
+      "label": "dead_stock_risk",
+      "content": "In the fragmented mass market, payment from a wholesaler is never guaranteed, there's no reliable demand signal for a new product, and the risk that a wholesaler folds overnight is always present — dead stock is a real, standing cost of doing business here.",
+      "sources": [{ "location_id": "loc-warehouse-exterior" }]
+    },
+    {
+      "id": "fact-key-accounts-context",
+      "label": "key_accounts_context",
+      "content": "Nakumatt, Kenya's dominant modern retailer, runs just 19 outlets but a Ksh 22 billion ($345 million) annual turnover and a 20% margin, serving the affluent quarter of the market that shops for a lifestyle, not survival. It's a completely different game from the credit-driven, fragmented mass market KasKazi is built to reach.",
+      "sources": [{ "location_id": "loc-cbd-avenue" }]
+    },
+    {
+      "id": "fact-bsr-compensation-package",
+      "label": "bsr_compensation_package",
+      "content": "BSRs draw a Ksh 5,000-6,000 monthly retainer plus commission — a top performer can clear up to Ksh 40,000 a month — with personal accident and hospital cover, help securing a bank loan, and a real promotion path to district and area manager.",
+      "sources": [{ "actor_id": "actor-hussein", "location_id": "loc-modern-boardroom" }]
+    },
+    {
+      "id": "fact-imitability-routing-ip",
+      "label": "imitability_routing_ip",
+      "content": "The mapping of all 100,000 kiosks and the routing logic behind each BSR's 12-day cycle is hard-won intellectual property — expensive and slow for a rival to rebuild from scratch. The real imitation risk is a competitor simply poaching trained BSRs, which is exactly what the pay, benefits, and promotion package is built to deter.",
+      "sources": [{ "actor_id": "actor-hussein", "location_id": "loc-modern-boardroom" }]
+    },
+    {
+      "id": "fact-manufacturer-reporting-value",
+      "label": "manufacturer_reporting_value",
+      "content": "What KasKazi sells a manufacturer client beyond bicycles: volume-sold reporting by outlet and category, market intelligence on where a brand is strong or weak and how to beat a competitor there, a success-rate readout per product and outlet, and tracking counterfeits back to their source.",
+      "sources": [{ "actor_id": "actor-judy", "location_id": "loc-modern-boardroom" }]
+    },
+    {
+      "id": "fact-dry-spell-risk",
+      "label": "dry_spell_risk",
+      "content": "The catch, even in KasKazi's real trajectory: most manufacturer engagements run three to six months as promotions rather than years as partnerships. That creates seasonal 'dry spells' — many of KasKazi's own costs are fixed — and stockouts at the end of a contract that open the door to counterfeit products.",
+      "sources": [{ "actor_id": "actor-judy", "location_id": "loc-modern-boardroom" }]
+    }
+  ],
+  "decisions": [
+    {
+      "id": "dec-frame-the-plan",
+      "prompt": "Before you pitch investors and start hiring, how do you want to frame the KasKazi opportunity?",
+      "requires_facts": ["fact-market-opportunity", "fact-storming-failure", "fact-bsr-hiring-criteria", "fact-bsr-coverage-math", "fact-bsr-daily-routine"],
+      "options": [
+        {
+          "id": "opt-lead-market-size",
+          "label": "Lead with the market's sheer scale",
+          "consequence_text": "You open with the number that matters: 100,000 kiosks, Ksh 7.5 billion a month, 75% of the retail market, and nobody organized to serve it. It's a compelling hook — but you'll need Hussein's operational discipline to make good on it.",
+          "illuminates": ["lo-1"],
+          "leads_to": "node-kawangware-market"
+        },
+        {
+          "id": "opt-lead-lessons-learned",
+          "label": "Lead with what the storming failure taught you",
+          "consequence_text": "You start instead with Golden Biscuits and the collapse of Leap Marketing Communications — cash collection broke down the moment sellers outran the ability to be paid. It's a humbler pitch, but it sets up why KasKazi's BSR system needs guarantors and routes, not just bicycles.",
+          "illuminates": ["lo-3"],
+          "leads_to": "node-kawangware-market"
+        }
+      ]
+    },
+    {
+      "id": "dec-choose-clients",
+      "prompt": "Talking to the traders in Kawangware, who should actually pay KasKazi for its services?",
+      "requires_facts": ["fact-manufacturer-natural-client", "fact-wholesaler-passive", "fact-kiosk-survival-debate", "fact-mass-market-basics", "fact-bulk-breaking", "fact-mini-supermarket-economics"],
+      "options": [
+        {
+          "id": "opt-court-manufacturers",
+          "label": "Court the FMCG manufacturers directly",
+          "consequence_text": "Judy's math is hard to argue with: manufacturers' margins run two to three times a wholesaler's, and they're the ones who gain the most from every extra kiosk you reach. You decide KasKazi's real client is the company behind the brand, not the shop that stocks it.",
+          "illuminates": ["lo-2"],
+          "leads_to": "node-warehouse-negotiation"
+        },
+        {
+          "id": "opt-court-wholesalers",
+          "label": "Try to win the wholesalers over first",
+          "consequence_text": "You reason that wholesalers are closer to the ground and easier to sign quickly. It's the path of least resistance — but Judy warns you that most of them are passive stockists with razor-thin margins and little appetite to fund anyone else's growth.",
+          "illuminates": ["lo-2"],
+          "leads_to": "node-warehouse-negotiation"
+        }
+      ]
+    },
+    {
+      "id": "dec-secure-wholesaler",
+      "prompt": "Standing in his warehouse, how do you bring this wholesaler into the KasKazi network?",
+      "requires_facts": ["fact-wholesaler-first-rejection", "fact-wholesaler-deal-terms", "fact-dead-stock-risk", "fact-mass-market-basics", "fact-bulk-breaking", "fact-key-accounts-context"],
+      "options": [
+        {
+          "id": "opt-add-alongside",
+          "label": "Offer to run alongside his own sales reps, on guaranteed terms",
+          "consequence_text": "You propose KasKazi as an added distribution arm, not a replacement — his own rep keeps his route, a KasKazi BSR covers the rest, and you guarantee payment for stock moved. He warms up fast: 'it was a good business deal.'",
+          "illuminates": ["lo-2"],
+          "leads_to": "node-modern-office-decision"
+        },
+        {
+          "id": "opt-exclusive-push",
+          "label": "Push him to drop his own reps and hand you distribution outright",
+          "consequence_text": "You go for exclusivity — cleaner routing, harder for a rival to copy. He bristles at giving up control of a channel he built himself, and agrees only reluctantly, which will cost you some goodwill down the line.",
+          "illuminates": ["lo-4"],
+          "leads_to": "node-modern-office-decision"
+        }
+      ]
+    },
+    {
+      "id": "dec-finalize-business-model",
+      "prompt": "Back at KasKazi's new offices, Hussein and Judy are waiting to finalize the model. What do you commit to?",
+      "requires_facts": ["fact-bsr-hiring-criteria", "fact-mini-supermarket-economics", "fact-manufacturer-natural-client", "fact-bsr-compensation-package", "fact-imitability-routing-ip", "fact-manufacturer-reporting-value", "fact-dry-spell-risk", "fact-key-accounts-context"],
+      "options": [
+        {
+          "id": "opt-organized-network",
+          "label": "Manufacturers as clients, BSRs backed by guarantors, and multi-year contracts",
+          "consequence_text": "You commit to the full model: FMCG manufacturers as paying clients, every BSR vetted with a Ksh 15,000 guarantor and a real pay-and-benefits package, and a push for durable contracts instead of one-off promotions.",
+          "illuminates": ["lo-2", "lo-3", "lo-4", "lo-5"],
+          "leads_to": "end-organized-network"
+        },
+        {
+          "id": "opt-storming-relapse",
+          "label": "Chase quick wholesaler wins and skip the guarantor paperwork",
+          "consequence_text": "You decide speed matters more than discipline: sign whichever wholesaler will move fastest, and wave through BSR hires without guarantors to hit headcount targets sooner.",
+          "illuminates": ["lo-2", "lo-3"],
+          "leads_to": "end-storming-relapse"
+        }
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "id": "node-kaskazi-office",
+      "title": "Evaluating the Business Plan",
+      "accessible_locations": ["loc-kaskazi-hq", "loc-kaskazi-boardroom"],
+      "route_locations": ["loc-nairobi-river-bridge", "loc-kawangware-entrance"],
+      "present_actors": ["actor-hussein", "actor-koech"],
+      "available_facts": [
+        "fact-market-opportunity",
+        "fact-storming-failure",
+        "fact-bsr-hiring-criteria",
+        "fact-bsr-coverage-math",
+        "fact-bsr-daily-routine"
+      ],
+      "live_decisions": ["dec-frame-the-plan"]
+    },
+    {
+      "id": "node-kawangware-market",
+      "title": "Kawangware Market",
+      "accessible_locations": ["loc-kawangware-market"],
+      "route_locations": ["loc-kawangware-backlane", "loc-industrial-avenue"],
+      "present_actors": ["actor-judy", "actor-mama-wanjiru", "actor-newspaper-vendor"],
+      "available_facts": [
+        "fact-mass-market-basics",
+        "fact-bulk-breaking",
+        "fact-mini-supermarket-economics",
+        "fact-manufacturer-natural-client",
+        "fact-wholesaler-passive",
+        "fact-kiosk-survival-debate"
+      ],
+      "live_decisions": ["dec-choose-clients"]
+    },
+    {
+      "id": "node-warehouse-negotiation",
+      "title": "Negotiating with the Wholesaler",
+      "accessible_locations": ["loc-warehouse-exterior", "loc-warehouse-floor"],
+      "route_locations": ["loc-cbd-avenue"],
+      "present_actors": ["actor-otieno"],
+      "available_facts": [
+        "fact-wholesaler-first-rejection",
+        "fact-wholesaler-deal-terms",
+        "fact-dead-stock-risk",
+        "fact-key-accounts-context"
+      ],
+      "live_decisions": ["dec-secure-wholesaler"]
+    },
+    {
+      "id": "node-modern-office-decision",
+      "title": "Finalizing the Business Model",
+      "accessible_locations": ["loc-modern-office", "loc-modern-boardroom"],
+      "present_actors": ["actor-hussein", "actor-judy"],
+      "available_facts": [
+        "fact-bsr-compensation-package",
+        "fact-imitability-routing-ip",
+        "fact-manufacturer-reporting-value",
+        "fact-dry-spell-risk"
+      ],
+      "live_decisions": ["dec-finalize-business-model"]
+    }
+  ],
+  "endings": [
+    {
+      "id": "end-organized-network",
+      "title": "The Organized Network",
+      "summary": "KasKazi maps all 100,000 kiosks, builds a trained and guaranteed force of roughly 200 Bicycle Sales Representatives on 12-day routes, and signs FMCG manufacturers — not wholesalers — as its paying clients. The network scales without the cash and stock losses that sank Wanjohi's earlier ventures.",
+      "real_case_comparison": "This mirrors KasKazi's real trajectory: by 2008 the company had grown to roughly 200 BSRs covering all 100,000 kiosks nationwide, secured high-profile manufacturer clients, and Wanjohi was already planning to cross into Uganda and Tanzania and to launch KasKazi-branded products. The one thing this ending gets right to flag rather than solve is the real company's lingering weakness: most manufacturer engagements were still three-to-six-month promotions rather than long-term partnerships, so the 'dry spell' risk between contracts was — and remained — a live problem, not a solved one.",
+      "lo_outcomes": [
+        { "lo_id": "lo-1", "verdict": "achieved — you sized the mass-market opportunity correctly and never lost sight of it." },
+        { "lo_id": "lo-2", "verdict": "achieved — manufacturers, not wholesalers, became KasKazi's paying clients, matching the real business's client base." },
+        { "lo_id": "lo-3", "verdict": "achieved — the guarantor and pay/benefits package match the real hiring discipline KasKazi needed to trust BSRs with cash and stock." },
+        { "lo_id": "lo-4", "verdict": "achieved — mapping and routing IP plus a retention package are exactly the real entry barriers KasKazi relied on." },
+        { "lo_id": "lo-5", "verdict": "partial — you flagged the short-term-promotion risk, which is honest; the real KasKazi still hadn't solved it as of 2008." }
+      ]
+    },
+    {
+      "id": "end-storming-relapse",
+      "title": "Back to Storming",
+      "summary": "KasKazi hires fast and signs wholesalers on handshake terms to hit headcount and coverage targets quickly. Within months, a run of BSRs vanish with cash and stock nobody can recover, and wholesalers slow-walk payment exactly as they always have. The network drifts back toward the undisciplined 'storming' pattern that sank Wanjohi's first venture.",
+      "real_case_comparison": "In reality, KasKazi's growth depended on precisely the disciplines skipped here: a personal guarantor (Ksh 15,000, endorsed by an employer) for every BSR, and FMCG manufacturers — whose margins ran two to three times a wholesaler's — as the paying clients, since they had both the money and the motive to fund the service. Skip either one, and the case's own history (Leap Marketing Communications and the Pamoja Distribution Network, both undone by exactly this kind of undiscipline) says where this road leads.",
+      "lo_outcomes": [
+        { "lo_id": "lo-1", "verdict": "achieved — you still correctly diagnosed the size of the opportunity." },
+        { "lo_id": "lo-2", "verdict": "missed — wholesalers' thin margins can't fund the service the way manufacturers can." },
+        { "lo_id": "lo-3", "verdict": "missed — without a guarantor, KasKazi has no recourse when a BSR disappears with cash or stock." },
+        { "lo_id": "lo-4", "verdict": "missed — fast, undisciplined hiring builds nothing a competitor couldn't copy just as fast." },
+        { "lo_id": "lo-5", "verdict": "missed — handshake deals are exactly the short-termism that produces dry spells." }
+      ]
+    }
+  ]
+}

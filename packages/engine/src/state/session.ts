@@ -70,7 +70,7 @@ export class GameSession {
   // existing pollDecisionPrompt() idiom, so callers (WorldScene/App, Task 1.6) can detect
   // the transition and emit their own bus event without GameSession depending on
   // bridge/events.ts (GameSession stays network/UI-free).
-  private traversal: { toNodeId: string; targetLocationId: string; routeLocations: string[] } | null = null;
+  private traversal: { toNodeId: string; targetLocationId: string; nextAccessibleLocations: string[] } | null = null;
   private sceneActivation: SceneActivation | null = null;
 
   constructor(world: World) {
@@ -98,18 +98,28 @@ export class GameSession {
     return this.walkableLocationIds().map((id) => this.locationsById.get(id)!).filter(Boolean);
   }
 
-  // The walkable set while traversing extends the completed node's accessible_locations
-  // with its route_locations and the next node's venue (the traversal target).
+  // Review fix (M5 Task 5.1 review): a node's route_locations are ALWAYS part of its
+  // walkable footprint, not just while a traversal is pending — they mirror the
+  // accessible∪route union `homeLocationForActor`/`checkFactSolvability`'s `gatherableAt`
+  // already use unconditionally (see the three-way parity mirror in placement.ts). A
+  // route NPC/fact can be the sole source for a fact THIS node's own live decision
+  // requires (e.g. a BSR encountered on the street outside the office); gating
+  // route_locations behind an already-chosen decision would make that fact — and hence
+  // the decision itself — permanently unreachable.
+  //
+  // While traversing, the walkable set additionally extends with the NEXT node's full
+  // accessible_locations (not merely its single venue): the route may only connect to a
+  // non-venue location of the next node (e.g. a warehouse yard/building lobby in front
+  // of the actual meeting room), and the player must be able to walk through it to reach
+  // the venue. Arrival is still gated on reaching the specific venue (`targetLocationId`,
+  // see `moveTo`), not merely any of the next node's locations.
   private walkableLocationIds(): string[] {
     const node = this.currentNode();
+    const base = [...node.accessible_locations, ...(node.route_locations ?? [])];
     if (this.traversal) {
-      return [...new Set([
-        ...node.accessible_locations,
-        ...this.traversal.routeLocations,
-        this.traversal.targetLocationId,
-      ])];
+      return [...new Set([...base, ...this.traversal.nextAccessibleLocations])];
     }
-    return node.accessible_locations;
+    return [...new Set(base)];
   }
   presentActors(): Actor[] {
     return this.currentNode().present_actors.map((id) => this.actorsById.get(id)!).filter(Boolean);
@@ -436,7 +446,7 @@ export class GameSession {
       this.traversal = {
         toNodeId: nextNode.id,
         targetLocationId: venue,
-        routeLocations: [...(completedNode.route_locations ?? [])],
+        nextAccessibleLocations: [...nextNode.accessible_locations],
       };
       // Underneath, the player keeps roaming the completed node's (extended) world;
       // mode() derives "traversing" from the pending traversal.
