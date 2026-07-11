@@ -62,3 +62,29 @@ export function assignNpcTiles(tpl: RoomTemplate, count: number): Point[] {
   while (tiles.length < count) tiles.push({ ...tpl.poiSlots[tiles.length % tpl.poiSlots.length] });
   return tiles;
 }
+
+// B3 fix (M5 Task 5.2 review): fact-orb placement used to be
+// `tpl.poiSlots[(npcCount + i) % poiSlots.length]` in WorldScene.renderLocation — no
+// overflow-safe scan, unlike assignNpcTiles, so a fact orb could land exactly on an
+// already-seated NPC's tile (or stack on another fact orb) whenever npcCount + factCount
+// exceeded poiSlots.length (confirmed live against case3-m5.world.json: Kawangware Market
+// put 3 of 5 orbs on an NPC tile; the warehouse floor put both orbs AND the actor on one
+// tile — a latent soft-lock for a pure location-only fact).
+//
+// assignNpcTiles(tpl, n) already builds exactly the deterministic sequence this needs —
+// poiSlots in order, then a row-major free-tile scan for anything beyond poiSlots.length,
+// skipping walls/desks/tables/doors and every already-claimed tile — so NPC tile i (for any
+// i < n) is assignNpcTiles(tpl, n)[i] regardless of how large n is. Facts simply continue
+// that SAME sequence from index npcCount: assignNpcTiles(tpl, npcCount + factCount) is that
+// sequence's first (npcCount + factCount) entries, and slicing off the first npcCount of
+// them (already reserved for NPCs) leaves exactly the fact tiles, guaranteed distinct from
+// every NPC tile and from each other.
+//
+// This is provably byte-identical to the historical formula whenever nothing collides: if
+// npcCount + factCount <= poiSlots.length, assignNpcTiles returns poiSlots.slice(0, npcCount
+// + factCount) directly (no wrap), so slice(npcCount) is poiSlots[npcCount..npcCount+factCount-1]
+// — exactly `poiSlots[(npcCount + i) % poiSlots.length]` for i = 0..factCount-1, since no
+// index ever reaches poiSlots.length and the modulo is a no-op.
+export function assignFactTiles(tpl: RoomTemplate, npcCount: number, factCount: number): Point[] {
+  return assignNpcTiles(tpl, npcCount + factCount).slice(npcCount);
+}

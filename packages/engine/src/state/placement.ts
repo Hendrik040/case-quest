@@ -37,7 +37,9 @@ export function homeLocationForActor(world: World, node: StoryNode, actorId: str
 // (see `resolveSeating` below) must be ported to n-aible
 // `backend/modules/world_generation/validation.py` (Phase 4) and mirrors the outdoor route
 // types enumerated in `packages/schema/src/validate.ts`'s `OUTDOOR_ROUTE_TYPES`.
-const VENUE_LOCATION_TYPES = new Set(["boardroom", "street", "shopfront", "client_site"]);
+// Exported (M5 Task 5.2 review, B2 fix) so templates.test.ts can assert every venue-capable
+// type has real trigger-zone geometry, without duplicating this list out of sync.
+export const VENUE_LOCATION_TYPES = new Set(["boardroom", "street", "shopfront", "client_site"]);
 
 export function venueLocationId(world: World, node: StoryNode): string | undefined {
   for (const lid of node.accessible_locations) {

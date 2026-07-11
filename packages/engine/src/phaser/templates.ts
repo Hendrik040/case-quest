@@ -80,7 +80,13 @@ function makeStreet(): RoomTemplate {
     playerSpawn: { x: 7, y: 9 },
     poiSlots: [{ x: 7, y: 4 }, { x: 7, y: 6 }, { x: 1, y: 5 }],
     doorSlots: [{ x: 3, y: 3 }, { x: 11, y: 8 }],
-    triggerZone: [],
+    // B2 fix (M5 Task 5.2 review): `street` is a venue-capable type (an outdoor gathering
+    // spot, per placement.ts's VENUE_LOCATION_TYPES) but had no triggerZone at all, so a
+    // node whose venue is a street could never open the meeting overlay. Row 5 sits in the
+    // open "bridge" crossing between the two facade bands (rows 2-3 and 7-8), untouched by
+    // either wall band and clear of every poiSlot/doorSlot/spawn — a sensible gathering spot
+    // for a walk-up meeting in the middle of the street.
+    triggerZone: [{ x: 6, y: 5 }, { x: 7, y: 5 }, { x: 8, y: 5 }],
   };
 }
 
@@ -96,7 +102,11 @@ function makeShopfront(): RoomTemplate {
     playerSpawn: { x: 7, y: 8 },
     poiSlots: stallCols.map((x) => ({ x, y: 5 })),
     doorSlots: [{ x: 7, y: 0 }, { x: 0, y: 5 }],
-    triggerZone: [],
+    // B2 fix (M5 Task 5.2 review): shopfront had no triggerZone at all, so Kawangware
+    // Market (case3-m5.world.json) could never open the meeting overlay — the legacy
+    // per-actor auto-chain was the ONLY way to gather facts there. Row 6, directly in front
+    // of the vendor poiSlots (row 5), is the natural "walk up to the market stalls" spot.
+    triggerZone: [{ x: 6, y: 6 }, { x: 7, y: 6 }, { x: 8, y: 6 }],
   };
 }
 
@@ -111,7 +121,32 @@ function makeWarehouse(): RoomTemplate {
     playerSpawn: { x: 7, y: 9 },
     poiSlots: [{ x: 7, y: 3 }, { x: 2, y: 6 }, { x: 12, y: 6 }],
     doorSlots: [{ x: 7, y: 0 }, { x: 0, y: 5 }],
-    triggerZone: [],
+    // B2 fix (M5 Task 5.2 review): given real trigger geometry defensively, mirroring
+    // shopfront/client_site — see the "warehouse" note on templates.test.ts's venue-capable
+    // trigger-zone coverage test for why this is safe even though `warehouse` isn't
+    // currently in placement.ts's VENUE_LOCATION_TYPES (WorldScene never starts a meeting
+    // with zero seated actors). Row 5 sits between the two crate rows (4 and 7), near the
+    // worker poi area, clear of every crate/poiSlot/doorSlot/spawn.
+    triggerZone: [{ x: 6, y: 5 }, { x: 7, y: 5 }, { x: 8, y: 5 }],
+  };
+}
+
+// Client site: a small negotiation area (a couple of crates/desks flanking a meeting spot)
+// — the template case3-m5.world.json's "Warehouse floor" venue (type `client_site`) actually
+// resolves to. Before this fix `client_site` had no TEMPLATES entry at all and silently fell
+// back to the generic DEFAULT_TEMPLATE (no triggerZone, no meeting-capable geometry) — see
+// the Task 5.2 e2e report's finding #2.
+function makeClientSite(): RoomTemplate {
+  const width = 15, height = 11;
+  const tiles = room(width, height);
+  const desks = [{ x: 5, y: 4 }, { x: 9, y: 4 }];
+  for (const d of desks) tiles[d.y][d.x] = TILE.DESK;
+  return {
+    width, height, tiles,
+    playerSpawn: { x: 7, y: 8 },
+    poiSlots: [{ x: 5, y: 5 }, { x: 9, y: 5 }, { x: 7, y: 3 }],
+    doorSlots: [{ x: 7, y: 0 }, { x: 0, y: 5 }],
+    triggerZone: [{ x: 6, y: 6 }, { x: 7, y: 6 }, { x: 8, y: 6 }],
   };
 }
 
@@ -122,6 +157,7 @@ const TEMPLATES: Partial<Record<LocationType, RoomTemplate>> = {
   street: makeStreet(),
   shopfront: makeShopfront(),
   warehouse: makeWarehouse(),
+  client_site: makeClientSite(),
 };
 
 const DEFAULT_TEMPLATE = makeTemplate([{ x: 7, y: 4 }]);

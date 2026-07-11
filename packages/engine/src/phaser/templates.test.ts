@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
+import type { LocationType } from "@case-quest/schema";
 import { getTemplate, TILE } from "./templates";
+import { VENUE_LOCATION_TYPES } from "../state/placement";
 
 describe("getTemplate", () => {
   it("returns a bordered room for a known type", () => {
@@ -68,5 +70,50 @@ describe("getTemplate", () => {
   it("existing templates default to an empty triggerZone", () => {
     expect(getTemplate("office").triggerZone).toEqual([]);
     expect(getTemplate("factory_floor").triggerZone).toEqual([]);
+  });
+
+  // B2 fix (M5 Task 5.2 review): every venue-capable location type (placement.ts's
+  // VENUE_LOCATION_TYPES — boardroom, street, shopfront, client_site) must have a
+  // non-empty, walkable, non-colliding triggerZone, or the walk-up multi-party meeting can
+  // never open there at all. `client_site` has no dedicated TEMPLATES entry — it falls
+  // through `getTemplate`'s DEFAULT_TEMPLATE fallback unless one is added; this list is
+  // exactly what closes that gap. `warehouse` is included too even though it isn't
+  // currently venue-capable per placement.ts: the Task 5.2 e2e report's finding #2 named it
+  // alongside shopfront as a template with no trigger geometry at all, and giving it real
+  // geometry defensively (in case a future world's designers add it to
+  // VENUE_LOCATION_TYPES, or a location typed "warehouse" is otherwise treated as a venue)
+  // costs nothing: WorldScene.fireMeetingStart no-ops whenever there are zero seated
+  // actors, so a walkable trigger zone on a template that's never actually a venue today is
+  // inert, not a live hazard.
+  describe("every venue-capable template (+ warehouse, defensively) has real trigger geometry", () => {
+    const typesToCheck = [...VENUE_LOCATION_TYPES, "warehouse"] as LocationType[];
+
+    for (const type of typesToCheck) {
+      it(`${type}: non-empty triggerZone, walkable, and non-colliding with poiSlots/doorSlots/spawn`, () => {
+        const t = getTemplate(type);
+        expect(t.triggerZone.length).toBeGreaterThan(0);
+
+        const blocked = new Set([TILE.WALL, TILE.DESK, TILE.TABLE, TILE.DOOR] as number[]);
+        for (const p of t.triggerZone) {
+          expect(p.x).toBeGreaterThanOrEqual(0);
+          expect(p.y).toBeGreaterThanOrEqual(0);
+          expect(p.x).toBeLessThan(t.width);
+          expect(p.y).toBeLessThan(t.height);
+          expect(blocked.has(t.tiles[p.y][p.x])).toBe(false);
+        }
+
+        const avoid = new Set(
+          [t.playerSpawn, ...t.poiSlots, ...t.doorSlots].map((p) => `${p.x},${p.y}`),
+        );
+        for (const p of t.triggerZone) expect(avoid.has(`${p.x},${p.y}`)).toBe(false);
+      });
+    }
+
+    it("client_site no longer falls back to the generic DEFAULT_TEMPLATE (which has no triggerZone)", () => {
+      const clientSite = getTemplate("client_site");
+      const fallback = getTemplate("home"); // home has no dedicated entry either — the real fallback shape
+      expect(clientSite.triggerZone.length).toBeGreaterThan(0);
+      expect(fallback.triggerZone).toEqual([]);
+    });
   });
 });

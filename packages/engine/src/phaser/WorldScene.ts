@@ -4,7 +4,7 @@ import type { EventBus } from "../bridge/events";
 import { resolvePlacement, resolveSeating } from "../state/placement";
 import { getTemplate, TILE, TILE_SIZE, type RoomTemplate } from "./templates";
 import { generatePlaceholderTextures } from "./textures";
-import { isTriggerZoneTile, enteredTriggerZone, isFacingTable, meetingStartPayload, assignNpcTiles } from "./meetingTrigger";
+import { isTriggerZoneTile, enteredTriggerZone, isFacingTable, meetingStartPayload, assignNpcTiles, assignFactTiles } from "./meetingTrigger";
 
 const MOVE_DURATION_MS = 220;
 
@@ -124,9 +124,9 @@ export class WorldScene extends Phaser.Scene {
    * `meetingTrigger.ts`'s walk-up-to-the-table meeting start) — lets an
    * external driver walk straight onto one without hardcoding template
    * geometry, the same way `getRoomGrid`/`getInteractables` already do for
-   * pathfinding/interaction. Empty for a template with no trigger zone
-   * (every template except `boardroom` today — see the Task 5.2 driver
-   * report for the resulting limitation on non-boardroom venues).
+   * pathfinding/interaction. Every venue-capable template has real trigger
+   * geometry now (M5 Task 5.2 review, B2 fix); still empty for a template
+   * that plainly isn't one (e.g. `office`/`factory_floor`/`home`).
    */
   getTriggerZoneTiles(): { tx: number; ty: number }[] {
     return this.tpl ? this.tpl.triggerZone.map((p) => ({ tx: p.x, ty: p.y })) : [];
@@ -217,8 +217,14 @@ export class WorldScene extends Phaser.Scene {
       this.interactables.push({ tx: slot.x, ty: slot.y, kind: "actor", id: actorId });
     });
 
+    // Seat-overflow fix (B3, M5 Task 5.2 review): assignFactTiles is byte-identical to the
+    // old `poiSlots[(npcIds.length + i) % poiSlots.length]` indexing when nothing collides,
+    // and a collision-aware row-major free-tile scan (like assignNpcTiles, extended to also
+    // avoid every NPC tile) otherwise — the old raw modulo could land a fact orb exactly on
+    // a seated NPC's tile once npcIds.length + factSpotIds.length exceeded poiSlots.length.
+    const factTiles = assignFactTiles(tpl, placement.npcIds.length, placement.factSpotIds.length);
     placement.factSpotIds.forEach((factId, i) => {
-      const slot = tpl.poiSlots[(placement.npcIds.length + i) % tpl.poiSlots.length];
+      const slot = factTiles[i];
       const { x, y } = tileCenter(slot.x, slot.y);
       this.rendered.push(this.add.image(x, y, "sprite-fact"));
       this.interactables.push({ tx: slot.x, ty: slot.y, kind: "fact", id: factId });
@@ -287,7 +293,17 @@ export class WorldScene extends Phaser.Scene {
     });
   }
 
+  // B2 fix follow-up (M5 Task 5.2 review): giving every venue-capable template (plus
+  // `warehouse`, defensively — see templates.test.ts's comment) real triggerZone tiles
+  // means a template can now have a walkable trigger zone at a location that ISN'T
+  // actually the node's venue (e.g. a "warehouse"-typed non-venue route hop, which is never
+  // in placement.ts's VENUE_LOCATION_TYPES) — `this.seatedActorIds` is `[]` there. Without
+  // this guard, simply walking through such a room would emit `encounter:meeting:start`
+  // with an empty actorIds array, and `GameSession.startMeeting` throws on zero
+  // participants (App.tsx's bus handler has no try/catch), crashing the app. A meeting can
+  // never have zero participants by design, so no-op here instead of ever emitting one.
   private fireMeetingStart(): void {
+    if (this.seatedActorIds.length === 0) return;
     this.bus.emit("encounter:meeting:start", meetingStartPayload(this.seatedActorIds));
   }
 
