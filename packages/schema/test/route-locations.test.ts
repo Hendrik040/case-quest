@@ -60,13 +60,26 @@ describe("Layer 2 — route_locations (traversal reachability)", () => {
     expect(codes(w)).toContain("route_unreachable");
   });
 
-  it("no route_unreachable when the route location's exits connect through to the next venue", () => {
+  it("no route_unreachable when the next venue is reachable only through a route location's exits", () => {
     const w = minimalWorld();
-    w.locations.find((l) => l.id === "loc1")!.exits = ["loc_street"];
-    w.locations.push({ id: "loc_street", name: "Street", type: "street", exits: ["loc1"] });
+    // n1's venue is loc1 (office). n2's venue is loc_market — NOT in n1's accessible set.
+    // The only way there is on foot: route loc_street -> exit -> loc_market. This proves
+    // both that route_locations seed the BFS and that their exits are followed.
+    w.locations.push({ id: "loc_street", name: "Street", type: "street", exits: ["loc_market"] });
+    w.locations.push({ id: "loc_market", name: "Market", type: "shopfront", exits: ["loc_street"] });
     w.nodes[0].route_locations = ["loc_street"];
-    // n2's accessible_locations is still ["loc1"], which is directly reachable (n1 already has it).
+    w.nodes[1].accessible_locations = ["loc_market"];
     const r = validateWorld(w);
     expect(r.errors.map((e) => e.code)).not.toContain("route_unreachable");
+  });
+
+  it("route_unreachable when the route location's exit chain to the next venue is broken", () => {
+    const w = minimalWorld();
+    // Same layout, but loc_street's exit onward is severed.
+    w.locations.push({ id: "loc_street", name: "Street", type: "street", exits: [] });
+    w.locations.push({ id: "loc_market", name: "Market", type: "shopfront", exits: ["loc_street"] });
+    w.nodes[0].route_locations = ["loc_street"];
+    w.nodes[1].accessible_locations = ["loc_market"];
+    expect(codes(w)).toContain("route_unreachable");
   });
 });

@@ -310,7 +310,7 @@ function checkFactSolvability(world: World): Issue[] {
         if (n.available_facts.includes(fid)) {
           issues.push({
             code: "fact_unobtainable",
-            message: `decision "${d.id}" in node "${n.id}" requires fact "${fid}", which is listed in the node's available_facts but cannot be gathered there — no source actor is in present_actors and no source location is in accessible_locations.`,
+            message: `decision "${d.id}" in node "${n.id}" requires fact "${fid}", which is listed in the node's available_facts but cannot be gathered there — no source actor is in present_actors and no source location is in accessible_locations or route_locations.`,
             path: `nodes.${n.id}.live_decisions`,
           });
         } else {

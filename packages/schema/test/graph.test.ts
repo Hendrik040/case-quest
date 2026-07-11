@@ -65,7 +65,7 @@ describe("Layer 2 — fact gatherability (source must be reachable in the node)"
     expect(r.ok).toBe(false);
     const iss = r.errors.find((e) => e.code === "fact_unobtainable")!;
     expect(iss.message).toBe(
-      `decision "d1" in node "n1" requires fact "f1", which is listed in the node's available_facts but cannot be gathered there — no source actor is in present_actors and no source location is in accessible_locations.`,
+      `decision "d1" in node "n1" requires fact "f1", which is listed in the node's available_facts but cannot be gathered there — no source actor is in present_actors and no source location is in accessible_locations or route_locations.`,
     );
     expect(iss.path).toBe("nodes.n1.live_decisions");
   });
