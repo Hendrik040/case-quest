@@ -387,6 +387,51 @@ describe("NaibleAdapter.onSceneWrapUp", () => {
   });
 });
 
+// ---- scene-id state tracking: setCurrentScene / onSceneWrapUp fallback --
+//
+// `setCurrentScene` is the load-bearing state channel the module doc comment
+// describes ("composing code ... is expected to call this whenever a meeting
+// encounter mounts/transitions"). Nothing above exercises it: no test calls
+// `setCurrentScene`, and every `onSceneWrapUp` call above passes an explicit
+// scene id. These tests close that gap.
+
+describe("NaibleAdapter — scene-id state tracking (setCurrentScene / onSceneWrapUp fallback)", () => {
+  it("setCurrentScene(id) makes subsequent onSay requests carry that scene_id (and none carry it before setCurrentScene is called)", async () => {
+    const { adapter, calls } = await startedAdapter(() => sseResponse(SINGLE_MENTION_SSE));
+
+    await drain(adapter.onSay({ target: { actorId: "nick" }, text: "first" }));
+    expect(bodyOf(calls[0])).not.toHaveProperty("scene_id");
+
+    adapter.setCurrentScene(12);
+    await drain(adapter.onSay({ target: { actorId: "nick" }, text: "second" }));
+    expect(bodyOf(calls[1]).scene_id).toBe(12);
+  });
+
+  it("onSceneWrapUp() falls back to the scene set via setCurrentScene when no explicit sceneId is given", async () => {
+    const { adapter, calls } = await startedAdapter(() => jsonResponse(200, SUBMIT_FOR_GRADING_NEXT_SCENE));
+    adapter.setCurrentScene(12);
+
+    const result = await adapter.onSceneWrapUp();
+    expect(result).toEqual({ nextSceneId: 13, complete: false });
+    expect(bodyOf(calls[0])).toEqual({ user_progress_id: 777, message: "SUBMIT_FOR_GRADING", scene_id: 12 });
+  });
+
+  it("onSceneWrapUp(explicitId) overrides the current-scene state, even when explicitId is falsy (0) — guards against a `??`-to-`||` regression", async () => {
+    const { adapter, calls } = await startedAdapter(() => jsonResponse(200, SUBMIT_FOR_GRADING_NEXT_SCENE));
+    adapter.setCurrentScene(12);
+
+    await adapter.onSceneWrapUp(0);
+    expect(bodyOf(calls[0])).toEqual({ user_progress_id: 777, message: "SUBMIT_FOR_GRADING", scene_id: 0 });
+  });
+
+  it("omits scene_id entirely from onSceneWrapUp's request when neither an explicit sceneId nor setCurrentScene has ever been provided", async () => {
+    const { adapter, calls } = await startedAdapter(() => jsonResponse(200, SUBMIT_FOR_GRADING_NEXT_SCENE));
+
+    await adapter.onSceneWrapUp();
+    expect(bodyOf(calls[0])).toEqual({ user_progress_id: 777, message: "SUBMIT_FOR_GRADING" });
+  });
+});
+
 describe("NaibleAdapter.onFinalGrade", () => {
   it("GETs /grade directly and maps the payload to camelCase GradePayload", async () => {
     const { adapter, calls } = await startedAdapter(() => jsonResponse(200, GRADE_PAYLOAD));
