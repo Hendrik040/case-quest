@@ -18,6 +18,9 @@ export type IssueCode =
   | "dead_end_node"
   | "fact_unsolvable"
   | "fact_unobtainable"
+  | "route_location_missing"
+  | "route_location_invalid_type"
+  | "route_unreachable"
   | "objective_unused"
   | "actor_reveals_nothing"
   | "fact_unused";
@@ -191,6 +194,71 @@ function checkGraph(world: World): Issue[] {
   return issues;
 }
 
+// Traversal semantics (M5 meeting encounters): route_locations connect a node's venue
+// to the next node's venue on foot. Opt-in — only nodes that declare route_locations
+// are subject to the reachability check below.
+//
+// Three-way parity mirror: this rule must be ported to n-aible
+// `backend/modules/world_generation/validation.py` (Phase 4) and is consumed by
+// `packages/engine/src/state/placement.ts`, which resolves route_locations into a
+// node's walkable accessible set during traversal.
+const OUTDOOR_ROUTE_TYPES = ["street", "shopfront", "client_site"] as const;
+
+function checkRouteLocations(world: World): Issue[] {
+  const issues: Issue[] = [];
+  const locationById = new Map(world.locations.map((l) => [l.id, l]));
+  const nodeById = new Map(world.nodes.map((n) => [n.id, n]));
+  const decisionById = new Map(world.decisions.map((d) => [d.id, d]));
+
+  const locationEdges = new Map(world.locations.map((l) => [l.id, l.exits]));
+  const reachableLocations = (seeds: Iterable<string>): Set<string> => {
+    const seen = new Set<string>(seeds);
+    const stack = [...seen];
+    while (stack.length) {
+      const cur = stack.pop()!;
+      for (const next of locationEdges.get(cur) ?? []) {
+        if (!seen.has(next)) { seen.add(next); stack.push(next); }
+      }
+    }
+    return seen;
+  };
+
+  for (const n of world.nodes) {
+    const routeLocs = n.route_locations ?? [];
+    for (const lid of routeLocs) {
+      const loc = locationById.get(lid);
+      if (!loc) {
+        issues.push({ code: "route_location_missing", message: `node "${n.id}" route_locations references unknown location "${lid}".`, path: `nodes.${n.id}.route_locations` });
+        continue;
+      }
+      if (!(OUTDOOR_ROUTE_TYPES as readonly string[]).includes(loc.type)) {
+        issues.push({ code: "route_location_invalid_type", message: `node "${n.id}" route_locations location "${lid}" has type "${loc.type}", expected an outdoor type (${OUTDOOR_ROUTE_TYPES.join(", ")}).`, path: `nodes.${n.id}.route_locations` });
+      }
+    }
+
+    if (routeLocs.length === 0) continue; // traversal semantics are opt-in
+
+    const reached = reachableLocations([...n.accessible_locations, ...routeLocs]);
+    for (const did of n.live_decisions) {
+      const d = decisionById.get(did);
+      if (!d) continue;
+      for (const o of d.options) {
+        const nextNode = nodeById.get(o.leads_to);
+        if (!nextNode) continue; // endings have no venue; dangling refs reported elsewhere
+        const venueReachable = nextNode.accessible_locations.some((lid) => reached.has(lid));
+        if (!venueReachable) {
+          issues.push({
+            code: "route_unreachable",
+            message: `node "${n.id}" declares route_locations but none connect (via exits) to node "${o.leads_to}"'s accessible_locations; the next venue is unreachable from "${n.id}".`,
+            path: `nodes.${n.id}.route_locations`,
+          });
+        }
+      }
+    }
+  }
+  return issues;
+}
+
 function checkFactSolvability(world: World): Issue[] {
   const issues: Issue[] = [];
   const { nodeIds, edges } = buildNodeGraph(world);
@@ -202,13 +270,18 @@ function checkFactSolvability(world: World): Issue[] {
 
   // Mirrors the engine's placement resolution: a fact is gatherable in a node
   // iff the node lists it in available_facts AND at least one of its sources
-  // is reachable there — a source location in accessible_locations (fact spot)
-  // or a source actor in present_actors (dialogue).
+  // is reachable there — a source location in accessible_locations ∪
+  // route_locations (fact spot; route locations count as in-node-accessible per
+  // the traversal mirror above) or a source actor in present_actors (dialogue).
+  //
+  // Three-way parity mirror: route_locations inclusion here must be ported to
+  // n-aible `backend/modules/world_generation/validation.py` (Phase 4) and
+  // matches `packages/engine/src/state/placement.ts`'s gathering resolution.
   const gatherableAt = (n: World["nodes"][number], fid: string): boolean => {
     if (!n.available_facts.includes(fid)) return false;
     const f = factById.get(fid);
     if (!f) return false;
-    const locations = new Set(n.accessible_locations);
+    const locations = new Set([...n.accessible_locations, ...(n.route_locations ?? [])]);
     const actors = new Set(n.present_actors);
     return f.sources.some(
       (s) =>
@@ -295,6 +368,7 @@ export function validateWorld(input: unknown): ValidationResult {
     ...checkFactSources(world),
     ...checkStartAndEndings(world),
     ...checkGraph(world),
+    ...checkRouteLocations(world),
     ...checkFactSolvability(world),
   ];
   const warnings: Issue[] = [...checkWarnings(world)];
