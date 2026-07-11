@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { validateWorld, WorldSchema, type World } from "@case-quest/schema";
-import { GameSession, type DebriefData, type EncounterView } from "./state/session";
+import { GameSession, type DebriefData, type EncounterView, type MeetingView, type SceneActivation } from "./state/session";
 import { EventBus } from "./bridge/events";
 import { createGame } from "./phaser/game";
 import { zoom } from "./ui/pixel/scale";
@@ -10,10 +10,12 @@ import { ChoiceBox } from "./ui/pixel/ChoiceBox";
 import { LocationBanner } from "./ui/pixel/LocationBanner";
 import { TransitionBand } from "./ui/pixel/TransitionBand";
 import { EncounterScreen, type EncounterFacts } from "./ui/pixel/EncounterScreen";
+import { MeetingEncounter } from "./ui/pixel/MeetingEncounter";
 import { DecisionEncounter } from "./ui/pixel/DecisionEncounter";
 import { DebriefPages } from "./ui/pixel/DebriefPages";
 import { gridToDataURL } from "./art/canvas";
 import { bigGrid } from "./art/grids";
+import { buildMeetingChatHost } from "./host/chatAdapter";
 
 const WORLD_URL = "/worlds/wholesale-offer.world.json";
 
@@ -34,10 +36,62 @@ function resolveWorldUrl(): string {
   return WORLD_URL;
 }
 
+// Host-page callback contract (M5 Phase 3, Task 3.1) for a meeting's chat
+// message: platform-id-keyed per the plan's literal signature (`target` is a
+// `platformPersonaId`, never an actorId) — see `host/chatAdapter.ts`, the
+// sole place that crosswalks this to `MeetingEncounter`'s actorId-keyed
+// `onSay` prop using `Actor.platform_persona_id` / `StoryNode.platform_scene_id`.
+export interface EncounterChatMessage {
+  nodeId: string;
+  platformSceneId?: number;
+  target: { platformPersonaId: number } | "all";
+  text: string;
+}
+export interface EncounterChatChunk {
+  personaId: number;
+  token?: string;
+  done?: boolean;
+  turnCount?: number;
+  sceneCompleted?: boolean;
+}
+export type EncounterChatCallback = (msg: EncounterChatMessage) => AsyncIterable<EncounterChatChunk>;
+
+export interface SceneWrapUpResult {
+  nextSceneId?: number;
+  complete?: boolean;
+}
+
+/**
+ * Shape of the platform's final scorecard for the debrief. Loosely typed on
+ * purpose — the grading rubric lives on the platform side (n-aible), out of
+ * this repo's control; `score`/`maxScore`/`summary` are the fields the debrief
+ * UI is expected to read, plus whatever else the platform sends through.
+ * Task 3.1's scope is the contract only: no caller in this task invokes
+ * `onFinalGrade` yet (wiring it into `DebriefPages` is a follow-up).
+ */
+export interface GradePayload {
+  score?: number;
+  maxScore?: number;
+  summary?: string;
+  [key: string]: unknown;
+}
+
 // Host-page callbacks for library embeds (see src/lib.ts). Defined here (not
 // lib.ts) so App can type its props without importing its own consumer.
 export interface CaseQuestCallbacks {
   onDebriefComplete?: (summary: { endingId: string; factsGathered: number; choices: string[] }) => void;
+  /**
+   * M5 Phase 3 host bridge: routes a meeting ASK/SAY message to the
+   * platform's persona chat. Absent in standalone/dev use, where the
+   * meeting's SAY path defaults to the local mock chat host instead (see
+   * `host/mockChat.ts`, wired by `host/chatAdapter.ts`).
+   */
+  onEncounterChat?: EncounterChatCallback;
+  /** Fired best-effort on WRAP UP. `platformSceneId` is `undefined` when the
+   * current node has no crosswalk id yet (world not enriched by Phase 4). */
+  onSceneWrapUp?: (platformSceneId?: number) => Promise<SceneWrapUpResult>;
+  /** Final scorecard, shown in the debrief. */
+  onFinalGrade?: () => Promise<GradePayload>;
 }
 
 export interface AppProps {
@@ -56,6 +110,7 @@ type Overlay =
   | { kind: "none" }
   | { kind: "transition"; view: EncounterView }
   | { kind: "encounter"; view: EncounterView }
+  | { kind: "meeting"; view: MeetingView }
   | { kind: "fieldMsg"; text: string; then?: () => void }
   | { kind: "decisionPrompt" }
   | { kind: "decision" }
@@ -121,6 +176,24 @@ export function App({ world: injectedWorld, callbacks }: AppProps) {
     if (session && session.pollDecisionPrompt()) setOverlay({ kind: "decisionPrompt" });
   };
 
+  // Task 1.5's BINDING for Task 2.3: poll `pollSceneActivation()` after a
+  // `moveTo` completes (same one-shot poll idiom as `checkUnlock`/
+  // `pollDecisionPrompt` above) and react — minimally: tell WorldScene to
+  // redraw (it only ever redraws on `scene:render`) and re-emit the
+  // transition itself as a `scene:activate` bus event so anything else
+  // listening (the e2e driver, future dev tooling) can observe a traversal
+  // landed. No new scene-intro overlay — the existing `LocationBanner`
+  // (driven by the caller's own `showLocationBanner()`/`location:changed`
+  // handling) already covers "you've arrived" for the new node's venue,
+  // since `currentLocationTitle` reads the session's *current* location,
+  // which `moveTo` has already updated by the time this runs.
+  const reactToSceneActivation = (activation: SceneActivation | null) => {
+    if (!activation) return;
+    const bus = busRef.current;
+    bus?.emit("scene:activate", activation);
+    bus?.emit("scene:render", {});
+  };
+
   // Rule 4 (boot + location flow): show the banner, then — 1200ms later,
   // independent of the banner's own 2500ms dismissal — check whether this
   // room starts an encounter chain.
@@ -177,7 +250,19 @@ export function App({ world: injectedWorld, callbacks }: AppProps) {
         const text = `${session.protagonist().name.toUpperCase()} found ${label}!`;
         setOverlay({ kind: "fieldMsg", text, then: checkUnlock });
       });
-      bus.on("location:changed", () => showLocationBanner());
+      // Task 2.3: walk-up/step-in meeting trigger (WorldScene, Task 1.6) ->
+      // start the multi-party meeting and mount its overlay. Freeze follows
+      // automatically from the generic `world:freeze` effect below (keyed on
+      // `overlay.kind !== "none"`) — no bespoke freeze code needed here,
+      // same as every other overlay kind.
+      bus.on("encounter:meeting:start", ({ actorIds }) => {
+        const view = session.startMeeting(actorIds);
+        setOverlay({ kind: "meeting", view });
+      });
+      bus.on("location:changed", () => {
+        reactToSceneActivation(session.pollSceneActivation());
+        showLocationBanner();
+      });
 
       if (!cancelled && parentRef.current) game = createGame(parentRef.current, session, bus);
       showLocationBanner();
@@ -282,9 +367,41 @@ export function App({ world: injectedWorld, callbacks }: AppProps) {
     // "node": chooseOption already moved the session to the new node's first
     // location — tell WorldScene to redraw that room (it only ever redraws
     // on "scene:render"), then run the usual banner + chain-check sequence.
+    // Defensive poll (mirrors the "location:changed" handler above): the
+    // rare already-at-venue edge case in `chooseOption` activates the next
+    // node without ever calling `moveTo`, so `location:changed` never fires
+    // for it — poll here too so that transition isn't silently dropped.
     setOverlay({ kind: "none" });
+    reactToSceneActivation(session.pollSceneActivation());
     busRef.current!.emit("scene:render", {});
     showLocationBanner();
+  };
+
+  // Ask refreshes the meeting view in place (same reasoning as `handleAsk`
+  // above): a re-opened ASK panel must reflect the fact just gathered.
+  const handleMeetingAsk = (actorId: string, factId: string): { line: string } => {
+    const session = sessionRef.current!;
+    const result = session.meetingAsk(actorId, factId);
+    const fresh = session.meetingState();
+    if (fresh) setOverlay({ kind: "meeting", view: fresh });
+    return result;
+  };
+
+  // Cosmetic-only (which bust is highlighted) — refreshes the view so
+  // `MeetingEncounter`'s `view.activeActorId` (not local state) reflects the
+  // pick, same refresh-in-place pattern as `handleMeetingAsk`.
+  const handleMeetingSetActive = (actorId: string) => {
+    const session = sessionRef.current!;
+    session.meetingSetActive(actorId);
+    const fresh = session.meetingState();
+    if (fresh) setOverlay({ kind: "meeting", view: fresh });
+  };
+
+  const handleMeetingWrapUp = () => {
+    const session = sessionRef.current!;
+    session.meetingWrapUp();
+    setOverlay({ kind: "none" });
+    checkUnlock();
   };
 
   const handleDecisionCancel = () => {
@@ -329,6 +446,25 @@ export function App({ world: injectedWorld, callbacks }: AppProps) {
             playerBackUrl={PLAYER_BACK_URL}
             onAsk={handleAsk}
             onMoveOn={handleMoveOn}
+          />
+        )}
+
+        {session && overlay.kind === "meeting" && (
+          <MeetingEncounter
+            view={overlay.view}
+            playerName={session.protagonist().name}
+            facts={computeEncounterFacts(session)}
+            agentSpriteUrl={agentSpriteDataUrl}
+            playerBackUrl={PLAYER_BACK_URL}
+            onAsk={handleMeetingAsk}
+            onSetActive={handleMeetingSetActive}
+            onSay={buildMeetingChatHost(session, callbacks?.onEncounterChat)}
+            onWrapUp={handleMeetingWrapUp}
+            onSceneWrapUp={
+              callbacks?.onSceneWrapUp
+                ? () => callbacks.onSceneWrapUp!(session.currentNode().platform_scene_id)
+                : undefined
+            }
           />
         )}
 
