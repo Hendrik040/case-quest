@@ -1,11 +1,20 @@
 import type { World, StoryNode } from "@case-quest/schema";
 
+// Traversal semantics (M5 meeting encounters): route_locations are walkable, in-node
+// locations for a scene (streets/paths between the scene's venue and the next one), so a
+// route NPC's fact-sourced home can legitimately be a route location, not just an
+// accessible_location.
+//
+// Three-way parity mirror: this "accessible ∪ route" reachable set must match
+// `packages/schema/src/validate.ts`'s `checkFactSolvability` (`gatherableAt`, which unions
+// `accessible_locations` with `route_locations`) and n-aible
+// `backend/modules/world_generation/validation.py` (Phase 4).
 export function homeLocationForActor(world: World, node: StoryNode, actorId: string): string {
   const actor = world.actors.find((a) => a.id === actorId);
   const fallback = node.accessible_locations[0];
   if (!actor) return fallback;
   const available = new Set(node.available_facts);
-  const accessible = new Set(node.accessible_locations);
+  const accessible = new Set([...node.accessible_locations, ...(node.route_locations ?? [])]);
   for (const factId of actor.knowledge) {
     if (!available.has(factId)) continue;
     const fact = world.facts.find((f) => f.id === factId);
@@ -17,12 +26,58 @@ export function homeLocationForActor(world: World, node: StoryNode, actorId: str
   return fallback;
 }
 
+// A node's "venue" is where its scene encounter (meeting/table, market stalls) happens:
+// the node's primary location (first of accessible_locations) when that location's type
+// is an indoor meeting venue (`boardroom`) or one of the outdoor venue types
+// (`street`/`shopfront`/`client_site`). Other accessible_locations (back offices, route
+// legs, etc.) are never venues even if their type matches, since only the scene's
+// designated primary location seats the full party.
+//
+// Three-way parity mirror: this venue rule and the grouped-seating behavior it drives
+// (see `resolveSeating` below) must be ported to n-aible
+// `backend/modules/world_generation/validation.py` (Phase 4) and mirrors the outdoor route
+// types enumerated in `packages/schema/src/validate.ts`'s `OUTDOOR_ROUTE_TYPES`.
+const VENUE_LOCATION_TYPES = new Set(["boardroom", "street", "shopfront", "client_site"]);
+
+function venueLocationId(world: World, node: StoryNode): string | undefined {
+  const primary = node.accessible_locations[0];
+  if (!primary) return undefined;
+  const location = world.locations.find((l) => l.id === primary);
+  if (location && VENUE_LOCATION_TYPES.has(location.type)) return primary;
+  return undefined;
+}
+
+/**
+ * All of a node's present_actors are seated together at the node's venue (a boardroom
+ * table or outdoor stalls), except route NPCs — actors whose home resolves to one of the
+ * node's route_locations stay put on the route rather than being swept into the venue.
+ * Locations that aren't the node's venue seat no one (grouped seating only applies there;
+ * non-venue locations keep the existing per-actor home-location rule in resolvePlacement).
+ */
+export function resolveSeating(
+  world: World,
+  node: StoryNode,
+  locationId: string,
+): { seatedActorIds: string[] } {
+  const venue = venueLocationId(world, node);
+  if (locationId !== venue) return { seatedActorIds: [] };
+  const routeLocations = new Set(node.route_locations ?? []);
+  const seatedActorIds = node.present_actors.filter(
+    (id) => !routeLocations.has(homeLocationForActor(world, node, id)),
+  );
+  return { seatedActorIds };
+}
+
 export function resolvePlacement(
   world: World,
   node: StoryNode,
   locationId: string,
 ): { npcIds: string[]; factSpotIds: string[]; doorTargets: string[] } {
-  const npcIds = node.present_actors.filter((id) => homeLocationForActor(world, node, id) === locationId);
+  const venue = venueLocationId(world, node);
+  const npcIds =
+    locationId === venue
+      ? resolveSeating(world, node, locationId).seatedActorIds
+      : node.present_actors.filter((id) => homeLocationForActor(world, node, id) === locationId);
 
   const factSpotIds = node.available_facts.filter((factId) => {
     const fact = world.facts.find((f) => f.id === factId);
