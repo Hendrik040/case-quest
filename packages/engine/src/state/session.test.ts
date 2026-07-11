@@ -229,10 +229,30 @@ describe("GameSession — meeting machine (multi-party)", () => {
     expect(() => s.startMeeting([])).toThrow();
   });
 
+  it("startMeeting throws for a world-valid actor absent from the current node", () => {
+    const s = newSession();
+    // "owner" exists in the world (the protagonist) but is not in the node's
+    // present_actors — must throw rather than silently yield paletteIndex -1.
+    expect(() => s.startMeeting(["roaster", "owner"])).toThrow(/not present/);
+  });
+
+  it("startMeeting throws on duplicate participant ids", () => {
+    const s = newSession();
+    expect(() => s.startMeeting(["roaster", "roaster"])).toThrow(/duplicate/);
+  });
+
   it("startMeeting throws outside roaming (e.g. mid encounter)", () => {
     const s = newSession();
     s.maybeStartChain();
     expect(s.mode()).toBe("encounter");
+    expect(() => s.startMeeting(["roaster", "buyer"])).toThrow();
+  });
+
+  it("startMeeting throws during a decision", () => {
+    const s = newSession();
+    gatherAll(s);
+    s.startDecision("decide_contract");
+    expect(s.mode()).toBe("decision");
     expect(() => s.startMeeting(["roaster", "buyer"])).toThrow();
   });
 
@@ -287,6 +307,29 @@ describe("GameSession — meeting machine (multi-party)", () => {
     expect(() => s.meetingAsk("roaster", "fact_capacity")).toThrow();
     expect(() => s.meetingSetActive("roaster")).toThrow();
     expect(() => s.meetingWrapUp()).toThrow();
+  });
+
+  it("a fact asked in a single-NPC encounter shows asked:true in a later meeting (shared gathered set)", () => {
+    const s = newSession();
+    s.maybeStartChain(); // roaster first
+    s.encounterAsk("fact_capacity");
+    s.encounterMoveOn(); s.encounterMoveOn(); // drain chain back to roaming
+    const v = s.startMeeting(["roaster", "buyer"]);
+    expect(v.topicsByActor.roaster[0]).toEqual({ factId: "fact_capacity", label: expect.any(String), asked: true });
+    expect(() => s.meetingAsk("roaster", "fact_capacity")).toThrow(); // closed cross-mode too
+  });
+
+  it("unlock completing inside the meeting: prompt stays silent mid-meeting, fires right after wrap-up", () => {
+    const s = newSession();
+    s.startMeeting(["roaster", "buyer", "bookkeeper"]);
+    s.meetingAsk("roaster", "fact_capacity");
+    s.meetingAsk("buyer", "fact_contract");
+    s.meetingAsk("bookkeeper", "fact_cash"); // 3/3 — decision now unlocked, mid-meeting
+    expect(s.isDecisionUnlocked("decide_contract")).toBe(true);
+    expect(s.pollDecisionPrompt()).toBe(false); // never fires during the meeting
+    s.meetingWrapUp();
+    expect(s.pollDecisionPrompt()).toBe(true); // immediate wrap-up fires it
+    expect(s.pollDecisionPrompt()).toBe(false); // once only
   });
 
   it("decision prompt does not fire during a meeting but does fire after wrap-up once unlocked", () => {

@@ -254,9 +254,19 @@ export class GameSession {
     this.assertActive();
     if (this.internalMode !== "roaming") throw new Error("cannot start a meeting outside roaming");
     if (actorIds.length === 0) throw new Error("a meeting requires at least one participant");
+    // Participants must be present in the CURRENT node, not merely exist in the world:
+    // paletteIndex derives from present_actors order, so a world-valid-but-absent actor
+    // would silently yield paletteIndex -1 (indexOf miss). Fail loudly instead — a wrong
+    // node/venue mapping in the trigger wiring should be a debuggable throw, not bad art.
+    const present = new Set(this.currentNode().present_actors);
     for (const id of actorIds) {
       if (!this.actorsById.has(id)) throw new Error(`unknown actor "${id}"`);
+      if (!present.has(id)) throw new Error(`"${id}" is not present in node "${this.currentNodeId}"`);
     }
+    // Duplicate ids are rejected (not deduped): a duplicated id means the caller's
+    // seating data is wrong, and silently collapsing it would mask that bug the same
+    // way a silent -1 paletteIndex would.
+    if (new Set(actorIds).size !== actorIds.length) throw new Error("duplicate actor ids in meeting participants");
     this.meetingParticipants = [...actorIds];
     this.meetingActiveActorId = actorIds[0];
     this.internalMode = "meeting";
