@@ -198,11 +198,26 @@ async function* framesFromStream(body: ReadableStream<Uint8Array>): AsyncGenerat
  * still to come) — both look identical field-for-field on the wire; only
  * stream exhaustion disambiguates them. */
 async function* withIsLast<T>(source: AsyncGenerator<T>): AsyncGenerator<[T, boolean]> {
-  let current = await source.next();
-  while (!current.done) {
-    const next = await source.next();
-    yield [current.value, next.done === true];
-    current = next;
+  // The `finally` here is load-bearing, not decorative: `for await...of` (and
+  // any early `break`/`return`/thrown error from a consumer) closes ONLY the
+  // generator instance it's directly iterating — i.e. `IteratorClose` calls
+  // `.return()` on *this* generator, not transitively on `source`. Without
+  // this `finally`, a consumer that stops early (e.g. `toMeetingChatChunks`
+  // throwing on an `{error}` frame that isn't `source`'s truly final item)
+  // would tear down `withIsLast` but abandon `source` mid-suspension,
+  // permanently skipping `framesFromStream`'s `finally { reader.releaseLock();
+  // }` and leaking the locked stream reader. Calling `source.return?.()` here
+  // propagates the closure down, same as `yield*` delegation would.
+  let current: IteratorResult<T> | undefined;
+  try {
+    current = await source.next();
+    while (!current.done) {
+      const next = await source.next();
+      yield [current.value, next.done === true];
+      current = next;
+    }
+  } finally {
+    if (!current?.done) await source.return?.(undefined);
   }
 }
 

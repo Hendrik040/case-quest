@@ -250,6 +250,43 @@ describe("NaibleAdapter.onSay — malformed lines and stream errors", () => {
 
     await expect(drain(adapter.onSay({ target: { actorId: "nick" }, text: "hi" }))).rejects.toThrow(/timed out/);
   });
+
+  it("releases the ReadableStream reader when the consumer aborts on an {error} frame that is not the stream's final SSE event", async () => {
+    // ERROR_SSE/CAPACITY_ERROR_SSE are each a *single* frame, and because
+    // withIsLast's one-item lookahead must fetch the NEXT item from the
+    // source generator before it can tell the consumer "this one was last",
+    // a single-frame stream's source generator is always already fully
+    // drained (and its reader-releasing `finally` already run) by the time
+    // the consumer ever sees that one frame and throws on it — so those two
+    // fixtures alone can't actually exercise the leak. This fixture puts a
+    // frame *after* the error frame (never sent by a real backend per
+    // chat_handler.py:1048's "error is always the last frame" — but nothing
+    // in this module enforces that) so `withIsLast`'s wrapped source is
+    // still genuinely suspended mid-stream when `toMeetingChatChunks`
+    // throws, reproducing the actual generator-composition teardown gap.
+    const rawSse =
+      `data: ${JSON.stringify({ content: "partial", done: false, persona_name: "Nick Elliott", persona_id: "501" })}\n\n` +
+      `data: ${JSON.stringify({ error: "OpenAI request timed out" })}\n\n` +
+      `data: ${JSON.stringify({ content: "never reached", done: false, persona_name: "Nick Elliott", persona_id: "501" })}\n\n`;
+    const bytes = new TextEncoder().encode(rawSse);
+    const streamBody = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (let i = 0; i < bytes.length; i += 17) controller.enqueue(bytes.slice(i, i + 17));
+        controller.close();
+      },
+    });
+    const { adapter } = await startedAdapter(() => ({
+      status: 200,
+      ok: true,
+      json: async () => ({}),
+      text: async () => rawSse,
+      body: streamBody,
+    }));
+
+    await expect(drain(adapter.onSay({ target: { actorId: "nick" }, text: "hi" }))).rejects.toThrow(/timed out/);
+
+    expect(streamBody.locked).toBe(false);
+  });
 });
 
 // ---- 202 + job_id poll fallback -----------------------------------------
@@ -327,6 +364,12 @@ describe("NaibleAdapter.onSceneWrapUp", () => {
     const result = await adapter.onSceneWrapUp(12);
     expect(result).toEqual({ nextSceneId: undefined, complete: true });
   });
+
+  it("throws when start() has not been called yet", async () => {
+    const fetch: FetchLike = vi.fn();
+    const adapter = createNaibleAdapter({ baseUrl: "", fetch, simulationId: 9, actorPersonaMap: buildActorPersonaMap(world) });
+    await expect(adapter.onSceneWrapUp(12)).rejects.toThrow(/start/i);
+  });
 });
 
 describe("NaibleAdapter.onFinalGrade", () => {
@@ -376,5 +419,11 @@ describe("NaibleAdapter.onFinalGrade", () => {
     const grade = await adapter.onFinalGrade();
     expect(grade.overallScore).toBe(78);
     expect(grade.overallFeedback).toBe(JOB_RESULT_GRADING.grading.overall_feedback);
+  });
+
+  it("throws when start() has not been called yet", async () => {
+    const fetch: FetchLike = vi.fn();
+    const adapter = createNaibleAdapter({ baseUrl: "", fetch, simulationId: 9, actorPersonaMap: buildActorPersonaMap(world) });
+    await expect(adapter.onFinalGrade()).rejects.toThrow(/start/i);
   });
 });
