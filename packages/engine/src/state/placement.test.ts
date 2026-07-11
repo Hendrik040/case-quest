@@ -93,5 +93,37 @@ describe("placement", () => {
       const { world: vWorld, node: vNode } = buildVenueWorld();
       expect(resolveSeating(vWorld, vNode, "street_outside")).toEqual({ seatedActorIds: [] });
     });
+    it("finds the venue even when a non-venue location comes first in accessible_locations", () => {
+      const { world: vWorld, node: vNode } = buildVenueWorld();
+      // Prepend a non-venue lobby: the boardroom now sits at index 1.
+      const world2: World = {
+        ...vWorld,
+        locations: [
+          { id: "lobby", name: "Lobby", type: "office", exits: ["hq_boardroom"] },
+          ...vWorld.locations,
+        ],
+      };
+      const node2 = { ...vNode, accessible_locations: ["lobby", "hq_boardroom"] };
+      const { seatedActorIds } = resolveSeating(world2, node2, "hq_boardroom");
+      expect(seatedActorIds.sort()).toEqual(["alice", "bob", "carol"]);
+      expect(resolvePlacement(world2, node2, "hq_boardroom").npcIds.sort()).toEqual(["alice", "bob", "carol"]);
+      expect(resolveSeating(world2, node2, "lobby")).toEqual({ seatedActorIds: [] });
+    });
+    it("falls back to per-actor scatter when a node with route_locations has no venue-typed location", () => {
+      const { world: vWorld, node: vNode } = buildVenueWorld();
+      // Replace the boardroom with an office: no venue-typed accessible location remains.
+      const world2: World = {
+        ...vWorld,
+        locations: vWorld.locations.map((l) =>
+          l.id === "hq_boardroom" ? { ...l, type: "office" as const } : l,
+        ),
+      };
+      for (const loc of ["hq_boardroom", "street_outside"]) {
+        expect(resolveSeating(world2, vNode, loc)).toEqual({ seatedActorIds: [] });
+      }
+      // Old per-actor rule: alice/bob/carol home to accessible_locations[0], vendor to the route.
+      expect(resolvePlacement(world2, vNode, "hq_boardroom").npcIds.sort()).toEqual(["alice", "bob", "carol"]);
+      expect(resolvePlacement(world2, vNode, "street_outside").npcIds).toEqual(["vendor"]);
+    });
   });
 });

@@ -27,11 +27,11 @@ export function homeLocationForActor(world: World, node: StoryNode, actorId: str
 }
 
 // A node's "venue" is where its scene encounter (meeting/table, market stalls) happens:
-// the node's primary location (first of accessible_locations) when that location's type
-// is an indoor meeting venue (`boardroom`) or one of the outdoor venue types
-// (`street`/`shopfront`/`client_site`). Other accessible_locations (back offices, route
-// legs, etc.) are never venues even if their type matches, since only the scene's
-// designated primary location seats the full party.
+// the FIRST venue-typed entry of accessible_locations, in order — the first location
+// whose type is an indoor meeting venue (`boardroom`) or one of the outdoor venue types
+// (`street`/`shopfront`/`client_site`); undefined if none match. Nothing in the schema
+// forces authors to list the venue first, so a lobby/office at index 0 must not silently
+// disable grouped seating.
 //
 // Three-way parity mirror: this venue rule and the grouped-seating behavior it drives
 // (see `resolveSeating` below) must be ported to n-aible
@@ -40,10 +40,10 @@ export function homeLocationForActor(world: World, node: StoryNode, actorId: str
 const VENUE_LOCATION_TYPES = new Set(["boardroom", "street", "shopfront", "client_site"]);
 
 function venueLocationId(world: World, node: StoryNode): string | undefined {
-  const primary = node.accessible_locations[0];
-  if (!primary) return undefined;
-  const location = world.locations.find((l) => l.id === primary);
-  if (location && VENUE_LOCATION_TYPES.has(location.type)) return primary;
+  for (const lid of node.accessible_locations) {
+    const location = world.locations.find((l) => l.id === lid);
+    if (location && VENUE_LOCATION_TYPES.has(location.type)) return lid;
+  }
   return undefined;
 }
 
