@@ -1,6 +1,6 @@
 import type { World } from "@case-quest/schema";
 import type { GameSession } from "../state/session";
-import type { MeetingChatCallback, MeetingChatChunk, MeetingChatMessage, MeetingSayTarget } from "../ui/pixel/meetingSay";
+import { cannedSayLine, type MeetingChatCallback, type MeetingChatChunk, type MeetingChatMessage, type MeetingSayTarget } from "../ui/pixel/meetingSay";
 import type { EncounterChatCallback } from "../App";
 import { createMockChatHost } from "./mockChat";
 
@@ -34,9 +34,21 @@ export function buildMeetingChatHost(session: GameSession, hostChat: EncounterCh
   return async function* adapted(msg: MeetingChatMessage): AsyncGenerator<MeetingChatChunk> {
     const target = resolvePlatformTarget(world, msg.target);
     if (target === null) {
-      // No platform_persona_id for this actor yet — degrade to the mock for
-      // just this one message rather than the whole meeting.
-      yield* mock(msg);
+      // Minor fix (final-review-minors.json, chatAdapter.ts:40): a LIVE host chat
+      // callback is wired, but this actor has no platform_persona_id crosswalk yet
+      // (the world hasn't been through Phase 4's enrichment). Silently degrading to
+      // the FULL mock chat host here would render an elaborate, in-character-sounding
+      // paraphrase indistinguishable from a real LLM reply — worth a loud warning (so
+      // a crosswalk gap doesn't go unnoticed once wired to a live backend) and a
+      // plain, obviously-not-fabricated line instead of the mock's more elaborate
+      // prose. (`resolvePlatformTarget` only ever returns null for a specific-actor
+      // target — "all" always resolves — so `msg.target` here is always `{actorId}`.)
+      const actorId = (msg.target as { actorId: string }).actorId;
+      const name = world.actors.find((a) => a.id === actorId)?.name ?? actorId;
+      console.warn(
+        `chatAdapter: actor "${actorId}" has no platform_persona_id crosswalk yet — using a canned line instead of the live host for this message`,
+      );
+      yield { actorId, token: cannedSayLine(name), done: true };
       return;
     }
     const node = session.currentNode();

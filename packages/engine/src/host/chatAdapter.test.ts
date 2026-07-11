@@ -100,15 +100,25 @@ describe("buildMeetingChatHost", () => {
     expect(chunks[0].actorId).toBe("owner");
   });
 
-  it("falls back to the mock host for a specific-actor target with no platform_persona_id crosswalk yet, without calling the host at all", async () => {
+  // Minor fix (final-review-minors.json, chatAdapter.ts:40): a live host IS wired, but
+  // this actor has no platform_persona_id crosswalk yet — warn loudly (so the gap
+  // doesn't go unnoticed once wired to a live backend) and use a plain, obviously-
+  // not-fabricated canned line rather than the mock's elaborate in-character prose,
+  // which could be mistaken for a real LLM reply.
+  it("falls back to a canned line (not the elaborate mock host) for a specific-actor target with no platform_persona_id crosswalk yet, without calling the live host at all, and warns", async () => {
     const session = new GameSession(makeWorld([BUYER]));
     const hostChat = vi.fn<EncounterChatCallback>();
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const say = buildMeetingChatHost(session, hostChat);
     const chunks = await drain(say({ target: { actorId: "buyer" }, text: "hi" }));
 
     expect(hostChat).not.toHaveBeenCalled();
     expect(chunks.length).toBeGreaterThan(0);
     expect(chunks.every((c) => c.actorId === "buyer")).toBe(true);
+    expect(chunks[chunks.length - 1].done).toBe(true);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0][0]).toContain("buyer");
+    warnSpy.mockRestore();
   });
 
   it("falls back to the target actor id when a reply chunk's personaId matches no known actor (crosswalk drift)", async () => {
