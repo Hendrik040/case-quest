@@ -204,6 +204,29 @@ function checkGraph(world: World): Issue[] {
 // node's walkable accessible set during traversal.
 const OUTDOOR_ROUTE_TYPES = ["street", "shopfront", "client_site"] as const;
 
+// Mirror of `packages/engine/src/state/placement.ts`'s `VENUE_LOCATION_TYPES` /
+// `venueLocationId` — replicated here rather than imported because packages/schema has
+// no dependency on packages/engine (the dependency runs the other way: engine depends
+// on schema). A node's "venue" is the FIRST venue-typed entry of accessible_locations,
+// in order — the same rule placement.ts uses to seat NPCs and to decide, in
+// `GameSession.chooseOption`, whether a decision option even creates a walking
+// traversal at all (no venue -> immediate teleport, no route reachability requirement).
+//
+// Three-way parity mirror: this set/function AND placement.ts's copy AND n-aible
+// `backend/modules/world_generation/validation.py` (Phase 4) must change in lockstep —
+// keep this comment's wording in sync with placement.ts's own mirror comment. Boardroom
+// is the one indoor venue type, which is why it's absent from OUTDOOR_ROUTE_TYPES above
+// but present here.
+const VENUE_LOCATION_TYPES = new Set(["boardroom", "street", "shopfront", "client_site"]);
+
+function venueLocationId(world: World, node: World["nodes"][number]): string | undefined {
+  for (const lid of node.accessible_locations) {
+    const location = world.locations.find((l) => l.id === lid);
+    if (location && VENUE_LOCATION_TYPES.has(location.type)) return lid;
+  }
+  return undefined;
+}
+
 function checkRouteLocations(world: World): Issue[] {
   const issues: Issue[] = [];
   const locationById = new Map(world.locations.map((l) => [l.id, l]));
@@ -211,12 +234,21 @@ function checkRouteLocations(world: World): Issue[] {
   const decisionById = new Map(world.decisions.map((d) => [d.id, d]));
 
   const locationEdges = new Map(world.locations.map((l) => [l.id, l.exits]));
-  const reachableLocations = (seeds: Iterable<string>): Set<string> => {
-    const seen = new Set<string>(seeds);
+  // Engine parity (review fix, C3): the BFS frontier must be restricted to the engine's
+  // ACTUAL walkable set for this decision option — GameSession.walkableLocationIds()
+  // while traversing is the current node's accessible∪route UNIONED with the next
+  // node's full accessible_locations (session.ts) — not arbitrary world connectivity.
+  // A location reachable only by passing through some other, non-walkable location
+  // would validate clean here but session.moveTo() rejects that hop at runtime: a
+  // permanent soft-lock (decisions throw while traversing, so the player can never
+  // progress). `allowed` gates BOTH the seed set and every expansion step.
+  const reachableLocations = (seeds: Iterable<string>, allowed: Set<string>): Set<string> => {
+    const seen = new Set<string>([...seeds].filter((s) => allowed.has(s)));
     const stack = [...seen];
     while (stack.length) {
       const cur = stack.pop()!;
       for (const next of locationEdges.get(cur) ?? []) {
+        if (!allowed.has(next)) continue;
         if (!seen.has(next)) { seen.add(next); stack.push(next); }
       }
     }
@@ -238,18 +270,24 @@ function checkRouteLocations(world: World): Issue[] {
 
     if (routeLocs.length === 0) continue; // traversal semantics are opt-in
 
-    const reached = reachableLocations([...n.accessible_locations, ...routeLocs]);
     for (const did of n.live_decisions) {
       const d = decisionById.get(did);
       if (!d) continue;
       for (const o of d.options) {
         const nextNode = nodeById.get(o.leads_to);
         if (!nextNode) continue; // endings have no venue; dangling refs reported elsewhere
-        const venueReachable = nextNode.accessible_locations.some((lid) => reached.has(lid));
-        if (!venueReachable) {
+        // Engine parity: GameSession.chooseOption only creates a walking traversal when
+        // the next node HAS a venue-typed accessible_location (session.ts's own
+        // venueLocationId check) — otherwise it teleports immediately regardless of
+        // route_locations, and on-foot reachability is moot (nothing to soft-lock).
+        const venue = venueLocationId(world, nextNode);
+        if (venue === undefined) continue;
+        const allowed = new Set([...n.accessible_locations, ...routeLocs, ...nextNode.accessible_locations]);
+        const reached = reachableLocations([...n.accessible_locations, ...routeLocs], allowed);
+        if (!reached.has(venue)) {
           issues.push({
             code: "route_unreachable",
-            message: `node "${n.id}" declares route_locations but none connect (via exits) to node "${o.leads_to}"'s accessible_locations; the next venue is unreachable from "${n.id}".`,
+            message: `node "${n.id}" declares route_locations but none connect (via exits, restricted to the engine's actual walkable set) to node "${o.leads_to}"'s venue location "${venue}"; the next venue is unreachable from "${n.id}".`,
             path: `nodes.${n.id}.route_locations`,
           });
         }

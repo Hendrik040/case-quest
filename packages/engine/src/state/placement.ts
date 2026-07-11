@@ -39,6 +39,9 @@ export function homeLocationForActor(world: World, node: StoryNode, actorId: str
 // types enumerated in `packages/schema/src/validate.ts`'s `OUTDOOR_ROUTE_TYPES`.
 // Exported (M5 Task 5.2 review, B2 fix) so templates.test.ts can assert every venue-capable
 // type has real trigger-zone geometry, without duplicating this list out of sync.
+// `packages/schema/src/validate.ts`'s `checkRouteLocations` also replicates this exact
+// set/function (as `VENUE_LOCATION_TYPES`/`venueLocationId`, review fix C3) since schema
+// has no dependency on engine — keep both copies' wording in sync.
 export const VENUE_LOCATION_TYPES = new Set(["boardroom", "street", "shopfront", "client_site"]);
 
 export function venueLocationId(world: World, node: StoryNode): string | undefined {
