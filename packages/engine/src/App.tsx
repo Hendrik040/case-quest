@@ -34,10 +34,62 @@ function resolveWorldUrl(): string {
   return WORLD_URL;
 }
 
+// Host-page callback contract (M5 Phase 3, Task 3.1) for a meeting's chat
+// message: platform-id-keyed per the plan's literal signature (`target` is a
+// `platformPersonaId`, never an actorId) — see `host/chatAdapter.ts`, the
+// sole place that crosswalks this to `MeetingEncounter`'s actorId-keyed
+// `onSay` prop using `Actor.platform_persona_id` / `StoryNode.platform_scene_id`.
+export interface EncounterChatMessage {
+  nodeId: string;
+  platformSceneId?: number;
+  target: { platformPersonaId: number } | "all";
+  text: string;
+}
+export interface EncounterChatChunk {
+  personaId: number;
+  token?: string;
+  done?: boolean;
+  turnCount?: number;
+  sceneCompleted?: boolean;
+}
+export type EncounterChatCallback = (msg: EncounterChatMessage) => AsyncIterable<EncounterChatChunk>;
+
+export interface SceneWrapUpResult {
+  nextSceneId?: number;
+  complete?: boolean;
+}
+
+/**
+ * Shape of the platform's final scorecard for the debrief. Loosely typed on
+ * purpose — the grading rubric lives on the platform side (n-aible), out of
+ * this repo's control; `score`/`maxScore`/`summary` are the fields the debrief
+ * UI is expected to read, plus whatever else the platform sends through.
+ * Task 3.1's scope is the contract only: no caller in this task invokes
+ * `onFinalGrade` yet (wiring it into `DebriefPages` is a follow-up).
+ */
+export interface GradePayload {
+  score?: number;
+  maxScore?: number;
+  summary?: string;
+  [key: string]: unknown;
+}
+
 // Host-page callbacks for library embeds (see src/lib.ts). Defined here (not
 // lib.ts) so App can type its props without importing its own consumer.
 export interface CaseQuestCallbacks {
   onDebriefComplete?: (summary: { endingId: string; factsGathered: number; choices: string[] }) => void;
+  /**
+   * M5 Phase 3 host bridge: routes a meeting ASK/SAY message to the
+   * platform's persona chat. Absent in standalone/dev use, where the
+   * meeting's SAY path defaults to the local mock chat host instead (see
+   * `host/mockChat.ts`, wired by `host/chatAdapter.ts`).
+   */
+  onEncounterChat?: EncounterChatCallback;
+  /** Fired best-effort on WRAP UP. `platformSceneId` is `undefined` when the
+   * current node has no crosswalk id yet (world not enriched by Phase 4). */
+  onSceneWrapUp?: (platformSceneId?: number) => Promise<SceneWrapUpResult>;
+  /** Final scorecard, shown in the debrief. */
+  onFinalGrade?: () => Promise<GradePayload>;
 }
 
 export interface AppProps {
