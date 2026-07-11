@@ -119,6 +119,20 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /**
+   * Dev/test helper (M5 Task 5.2): the current room template's triggerZone
+   * tiles (see `templates.ts`'s `RoomTemplate.triggerZone` and
+   * `meetingTrigger.ts`'s walk-up-to-the-table meeting start) — lets an
+   * external driver walk straight onto one without hardcoding template
+   * geometry, the same way `getRoomGrid`/`getInteractables` already do for
+   * pathfinding/interaction. Empty for a template with no trigger zone
+   * (every template except `boardroom` today — see the Task 5.2 driver
+   * report for the resulting limitation on non-boardroom venues).
+   */
+  getTriggerZoneTiles(): { tx: number; ty: number }[] {
+    return this.tpl ? this.tpl.triggerZone.map((p) => ({ tx: p.x, ty: p.y })) : [];
+  }
+
+  /**
    * Dev/test helper: a blocked/walkable snapshot of the current room, sized
    * to the active template — lets an external driver (e.g. the e2e script)
    * do its own pathfinding without hardcoding template geometry.

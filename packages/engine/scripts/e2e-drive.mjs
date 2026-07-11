@@ -21,10 +21,35 @@
 // A hard cap on strategy steps fails the run loudly instead of wandering
 // forever on an unwinnable world. Defaults to the committed
 // "wholesale-offer" toy case; set CQ_WORLD_URL to drive any other valid
-// world.json v0.1 world — nothing below knows any world's actors, rooms,
-// chain lengths, or option order. Screenshots every beat to `e2e-shots/`
-// (gitignored) so a human can eyeball the diorama grammar (platforms,
-// panels, message-box skins).
+// world.json v0.1/v0.2 world — nothing below knows any world's actors,
+// rooms, chain lengths, or option order. Screenshots every beat to
+// `e2e-shots/` (gitignored) so a human can eyeball the diorama grammar
+// (platforms, panels, message-box skins).
+//
+// M5 (Task 5.2) additions for multi-scene traversal + meeting worlds
+// (schema "0.2", `route_locations` + venue templates):
+//  - a "meeting" overlay branch (`[data-testid=meeting-encounter]`) alongside
+//    the legacy single-NPC "encounter" one — driven by `runMeetingTurn`:
+//    ASK every open topic for every seated participant, exercise SAY once
+//    (against the default local mock chat host's thinking/streaming/
+//    revealing phases), then WRAP UP.
+//  - `roamingAction`'s BFS now walks the session's own live walkable set
+//    (`accessibleLocations()`, which already unions in route_locations and,
+//    mid-traversal, the next node's locations) instead of the current
+//    node's `accessible_locations` alone, so it can route through a scene's
+//    route locations and all the way to the next node's venue.
+//  - a real, confirmed engine race condition (documented in the Task 5.2
+//    report, not fixed here): entering a `boardroom` venue starts BOTH the
+//    legacy per-actor auto-chain (`maybeStartChain`, on App's 1200ms
+//    CHAIN_CHECK_DELAY_MS timer) and the new walk-up meeting trigger as two
+//    independent, unreconciled mechanisms — whichever fires first wins, and
+//    passively waiting (the old `waitForOverlayOrSettle`-only behavior)
+//    always loses that race to the timer. `rushToTriggerZoneIfAny` wins it
+//    back by walking the player onto a triggerZone tile the instant a new
+//    room is entered, well under 1200ms. It's a no-op for every other
+//    template (shopfront/warehouse/client_site's DEFAULT_TEMPLATE fallback
+//    have no triggerZone at all today), so those venues are only ever
+//    playable via the legacy auto-chain — see the report.
 //
 // Usage:
 //   pnpm -C packages/engine dev &            # dev server must already be up
@@ -73,6 +98,9 @@ const MAX_STEPS = 400;
 // (which requires non-empty trimmed text before Enter submits).
 const REASONING_LINE =
   "Weighing everything gathered so far, this option is the most defensible call available right now.";
+// Generic SAY line used once (see `runMeetingTurn`'s `exerciseSay` flag) to exercise the
+// meeting's free-text path against the local mock chat host's streamed reply.
+const SAY_LINE = "Can you walk me through how you're seeing this?";
 
 mkdirSync(SHOTS_DIR, { recursive: true });
 
@@ -126,6 +154,7 @@ async function readState(page) {
       overlays: {
         transition: has("transition-band"),
         encounter: has("encounter"),
+        meeting: has("meeting-encounter"),
         fieldMsg: has("field-msg"),
         decisionPrompt: has("decision-prompt"),
         decisionEncounter: has("decision-encounter"),
@@ -250,21 +279,49 @@ async function approachAndInteract(page, target) {
   const grid = await getRoomGrid(page);
   const tile = await getPlayerTile(page);
   const options = approachOptions(target, grid);
-  let chosen = null;
-  let path = null;
   for (const opt of options) {
     const p = bfsPath(grid, tile, opt.anchor);
     if (p) {
-      chosen = opt;
-      path = p;
-      break;
+      await walkPath(page, p);
+      const stepped = await walkStep(page, opt.key); // anchor -> adjacent; also sets facing toward target
+      if (!stepped) throw new Error(`approach step blocked for ${target.kind}:${target.id}`);
+      await press(page, "Space");
+      return;
     }
   }
-  if (!chosen) throw new Error(`no reachable approach to ${target.kind}:${target.id}`);
-  await walkPath(page, path);
-  const stepped = await walkStep(page, chosen.key); // anchor -> adjacent; also sets facing toward target
-  if (!stepped) throw new Error(`approach step blocked for ${target.kind}:${target.id}`);
-  await press(page, "Space");
+
+  // Fallback (M5 Task 5.2 finding — see the task report): `approachOptions`' anchor-2-
+  // tiles-out convention needs open floor on BOTH the anchor and the adjacent tile of at
+  // least one side. `makeStreet()`'s second doorSlot ({11,8} in this world's route
+  // locations) sits close enough to a room border, boxed in on three sides by facade
+  // walls, that every side fails that test even though the door is perfectly reachable
+  // and interactable from directly below (a human player would just walk up and press
+  // Space — nothing here is actually unreachable in play). Every door in every template
+  // sits on a genuinely blocked (WALL) tile (true across all of `templates.ts` today), so
+  // it's always safe to walk to any ONE clear adjacent tile via a plain BFS (no anchor
+  // needed) and press the facing key once more even though it won't move the player —
+  // `WorldScene.update()` sets `this.facing` on every direction press regardless of
+  // whether the step itself is blocked (see `WorldScene.ts`) — to guarantee facing before
+  // Space. Gated on the target itself being confirmed-blocked so this can never walk the
+  // player onto a walkable target instead of stopping beside it (e.g. a fact orb).
+  if (grid.blocked[target.ty]?.[target.tx]) {
+    const sides = [
+      { adjacent: { tx: target.tx, ty: target.ty + 1 }, key: "ArrowUp" },
+      { adjacent: { tx: target.tx, ty: target.ty - 1 }, key: "ArrowDown" },
+      { adjacent: { tx: target.tx + 1, ty: target.ty }, key: "ArrowLeft" },
+      { adjacent: { tx: target.tx - 1, ty: target.ty }, key: "ArrowRight" },
+    ];
+    for (const opt of sides) {
+      if (!inBounds(opt.adjacent, grid) || grid.blocked[opt.adjacent.ty][opt.adjacent.tx]) continue;
+      const p = bfsPath(grid, tile, opt.adjacent);
+      if (!p) continue;
+      await walkPath(page, p);
+      await press(page, opt.key); // face target -- a no-op step, since target is blocked
+      await press(page, "Space");
+      return;
+    }
+  }
+  throw new Error(`no reachable approach to ${target.kind}:${target.id}`);
 }
 
 // --- UI helpers ---------------------------------------------------------------
@@ -365,6 +422,85 @@ async function runEncounterTurn(page) {
 }
 
 /**
+ * Drives one full multi-party meeting (M5) from open to WRAP UP: ASK every
+ * open topic for every seated participant via the grouped ask panel, then —
+ * only when `exerciseSay` is set (the caller's job: once per whole run, per
+ * the task's "optionally exercise SAY once") — send one free-text SAY at
+ * @ALL and ride out the mock chat host's thinking -> streaming -> revealing
+ * phases, then confirm WRAP UP.
+ *
+ * `MeetingActionMenu`/`MeetingAskPanel` share `ActionMenu`/`TopicsPanel`'s
+ * `useCursor` skip-disabled-entries idiom, so plain Space/Arrow presses stay
+ * as deterministic as `runEncounterTurn`'s: ASK is disabled only when
+ * literally no participant has any topic at all (never true once a meeting
+ * has any topics), so the cursor always boots on ASK; one ArrowDown from
+ * there reaches SAY, and one ArrowUp wraps to the last action, WRAP UP.
+ */
+async function runMeetingTurn(page, exerciseSay) {
+  await waitVisible(page, "[data-testid=meeting-encounter]");
+  await shot(page, "meeting-open");
+
+  for (let asks = 0; ; asks++) {
+    if (asks > 80) throw new Error("meeting: topics never exhausted");
+    const view = await page.evaluate(() => window.__cqSession.meetingState());
+    if (!view) break; // wrapped up between reads; the loop re-dispatches
+    const hasOpen = Object.values(view.topicsByActor).some((topics) => topics.some((t) => !t.asked));
+    if (!hasOpen) break;
+    await waitVisible(page, "[data-testid=meeting-action-menu]");
+    if (asks === 0) await shot(page, "meeting-action-menu");
+    await press(page, "Space"); // ASK (first enabled action)
+    await waitVisible(page, "[data-testid=meeting-ask-panel]");
+    if (asks === 0) await shot(page, "meeting-ask-panel");
+    await press(page, "Space"); // pick the first unasked topic (skips disabled headers/asked topics)
+    await waitVisible(page, "[data-testid=typewriter]");
+    await page.waitForTimeout(250); // let a few characters type in before the screenshot
+    if (asks === 0) await shot(page, "meeting-reveal");
+    await exhaustTypewriter(page); // reveal -> back to menu
+    await waitVisible(page, "[data-testid=meeting-action-menu]");
+  }
+
+  if (exerciseSay) {
+    console.log("meeting: exercising SAY (@ALL, mock chat stream) ...");
+    await press(page, "ArrowDown"); // ASK -> SAY
+    await press(page, "Space"); // pick SAY
+    await waitVisible(page, "[data-testid=choice-box]"); // the @persona/@ALL target picker
+    await press(page, "ArrowUp"); // wrap to the last target option, @ALL
+    await press(page, "Space");
+    await waitVisible(page, "[data-testid=meeting-say-panel]");
+    await shot(page, "meeting-say-panel");
+    await page.locator("[data-testid=meeting-say-textarea]").fill(SAY_LINE);
+    await page.locator("[data-testid=meeting-say-submit]").click();
+    // A real `.click()` (unlike the keyboard-only `press()` used everywhere else in this
+    // strategy) leaves the mouse parked at the clicked element's coordinates — re-park it
+    // out of the way immediately (see the boot-time mouse.move's doc comment: any overlay
+    // whose layout later shifts under a stationary pointer can spuriously re-fire
+    // `onMouseEnter` and hijack the keyboard cursor).
+    await page.mouse.move(2, 2);
+    // thinking -> streaming (mock host, token-paced): best-effort screenshot only --
+    // with a short token delay these two phases can come and go before a poll ever
+    // catches them, so a miss here must NOT be treated as "never advanced" the way
+    // `exhaustTypewriter` would (that helper only knows about the "revealing" phase's
+    // `[data-testid=typewriter]`, which doesn't exist yet while thinking/streaming).
+    try {
+      await page.waitForSelector("[data-testid=meeting-thinking], [data-testid=meeting-stream]", { timeout: 500 });
+      await shot(page, "meeting-say-stream");
+    } catch { /* too brief to catch -- fine, the reveal below is what actually matters */ }
+    // revealing: the final line, through the same shared Typewriter as ASK's reveal.
+    await waitVisible(page, "[data-testid=typewriter]", 8000);
+    await exhaustTypewriter(page); // revealing -> back to menu
+    await waitVisible(page, "[data-testid=meeting-action-menu]");
+  }
+
+  console.log("meeting: wrapping up ...");
+  await press(page, "ArrowUp"); // ASK (first enabled action) -> wraps to WRAP UP
+  await press(page, "Space");
+  await waitVisible(page, "[data-testid=choice-box]"); // the yes/no confirm
+  await shot(page, "meeting-wrap-confirm");
+  await press(page, "Space"); // confirm YES
+  await page.waitForTimeout(300); // let the overlay unmount (and a decisionPrompt, if any, mount)
+}
+
+/**
  * The decision encounter: prompt typewriter -> option list -> confirm ->
  * reasoning. Deterministic, world-agnostic picks: the FIRST option (the
  * cursor boots there) and YES on the confirm (ditto), with a generic
@@ -435,7 +571,13 @@ async function roamingAction(page, visitedRooms) {
     const s = window.__cqSession;
     const world = s.world();
     const node = s.currentNode();
-    const accessible = node.accessible_locations;
+    // M5 (Task 5.2): the session's own live walkable set — accessible_locations ∪
+    // route_locations, plus (mid-traversal) the next node's full accessible_locations —
+    // not just node.accessible_locations alone, so the BFS below can route through a
+    // scene's route locations (where route NPCs/flavor facts live) and all the way to
+    // the next node's venue once GameSession.mode() reports "traversing". Mirrors what
+    // WorldScene.renderLocation already passes into resolvePlacement as `walkableIds`.
+    const accessible = s.accessibleLocations().map((l) => l.id);
     const exits = {};
     for (const lid of accessible) {
       const loc = world.locations.find((l) => l.id === lid);
@@ -499,6 +641,56 @@ async function roamingAction(page, visitedRooms) {
   return false;
 }
 
+/**
+ * M5 (Task 5.2) — win a real, confirmed engine race: entering a `boardroom`
+ * venue starts BOTH the legacy per-actor auto-chain (`maybeStartChain`, on
+ * App's 1200ms CHAIN_CHECK_DELAY_MS timer) and the new walk-up meeting
+ * trigger (`WorldScene`'s triggerZone) — two independent, unreconciled
+ * mechanisms racing each other. Passively waiting (the old
+ * `waitForOverlayOrSettle`-only behavior) always loses to the timer, since
+ * the timer fires unconditionally while a human/driver is still deciding
+ * where to walk. Winning instead just requires acting fast: walk the player
+ * onto a triggerZone tile the instant a new room is entered, well under
+ * 1200ms (a single `walkStep` plus a screenshot comfortably clears it).
+ *
+ * A no-op (returns false immediately) for any room whose template has no
+ * triggerZone at all — which, per `templates.ts` today, is every template
+ * except `boardroom` (`shopfront`/`warehouse`/`client_site`'s
+ * DEFAULT_TEMPLATE fallback all have empty `triggerZone` arrays and no
+ * `TABLE` tiles for `isFacingTable` either) — so those venues can only ever
+ * be played through the legacy auto-chain. See the Task 5.2 report.
+ */
+async function rushToTriggerZoneIfAny(page) {
+  const zone = await page.evaluate(() => window.__cqScene.getTriggerZoneTiles());
+  if (!zone || zone.length === 0) return false;
+
+  // Defensive: this world's topology never re-enters a venue room after its meeting
+  // wraps up, but GameSession.startMeeting() has no "already met" guard of its own —
+  // only rush onto the trigger zone while some seated actor here still has an open,
+  // ungathered topic, so a hypothetical revisit can't re-open a finished meeting.
+  const stillOpen = await page.evaluate(() => {
+    const s = window.__cqSession;
+    const node = s.currentNode();
+    return window.__cqScene.getInteractables().some((it) => {
+      if (it.kind !== "actor") return false;
+      const actor = s.world().actors.find((a) => a.id === it.id);
+      return (actor?.knowledge ?? []).some((f) => node.available_facts.includes(f) && !s.isFactGathered(f));
+    });
+  });
+  if (!stillOpen) return false;
+
+  const grid = await getRoomGrid(page);
+  const tile = await getPlayerTile(page);
+  let best = null;
+  for (const z of zone) {
+    const path = bfsPath(grid, tile, { tx: z.tx, ty: z.ty });
+    if (path && (!best || path.length < best.length)) best = path;
+  }
+  if (!best) return false; // unreachable -- shouldn't happen for a spawn-adjacent trigger zone
+  await walkPath(page, best);
+  return true;
+}
+
 // --- main ----------------------------------------------------------------------
 
 const consoleErrors = [];
@@ -516,6 +708,19 @@ async function main() {
   await page.goto(GOTO_URL);
   await page.waitForFunction(() => window.__cqScene && window.__cqSession, null, { timeout: 30000 });
   await page.mouse.click(500, 350); // defensive focus, mirrors the M2 driver
+  // M5 (Task 5.2) finding: leaving the mouse parked at a fixed viewport point for the
+  // whole run is a real driver hazard, not just an unused mouse — every kit choice list
+  // wires `onMouseEnter={() => setCursor(i)}` for human mouse play, and Chromium re-fires
+  // `mouseenter` for whatever now sits at a stationary pointer's coordinates the instant
+  // the DOM mutates underneath it (no physical movement needed). Confirmed live: the
+  // meeting's SAY reply reveal renders a differently-sized MessageBox than ASK's, which
+  // shifts `MeetingActionMenu` under (500, 350) enough that this fired a spurious
+  // `setCursor` onto WRAP UP right after the fresh mount had correctly defaulted to ASK —
+  // a driver-only artifact (confirmed by moving the mouse away and re-running: the cursor
+  // then stayed put), not an engine bug. Parking the mouse off in a corner once, right
+  // after the focus click, keeps it clear of every future overlay's layout for the rest
+  // of the run.
+  await page.mouse.move(2, 2);
   await page.waitForTimeout(300);
 
   // Boot is racy on a cold dev server: `__cqScene` is only set once Phaser's
@@ -547,6 +752,9 @@ async function main() {
   // --- strategy loop: play whatever this world is until it debriefs -------------
   const visitedRooms = new Set();
   let lastRoomKey = null;
+  // M5: exercise SAY exactly once across the whole run (the task's "optionally
+  // exercise SAY once"), on the first meeting encountered — see `runMeetingTurn`.
+  let meetingsSeen = 0;
 
   for (let step = 1; ; step++) {
     if (step > MAX_STEPS) {
@@ -565,6 +773,11 @@ async function main() {
       await runEncounterTurn(page);
       continue;
     }
+    if (state.overlays.meeting) {
+      await runMeetingTurn(page, meetingsSeen === 0);
+      meetingsSeen += 1;
+      continue;
+    }
     if (state.overlays.decisionEncounter) {
       await runDecisionEncounter(page);
       continue;
@@ -580,13 +793,15 @@ async function main() {
       continue;
     }
 
-    // Roaming with no overlay. On first sight of a room, give its auto-chain
-    // check time to fire before walking anywhere.
+    // Roaming with no overlay. On first sight of a room, race the legacy
+    // auto-chain to any meeting triggerZone (see `rushToTriggerZoneIfAny`),
+    // then give the auto-chain check time to fire before walking anywhere.
     const roomKey = `${state.nodeId}:${state.locationId}`;
     if (roomKey !== lastRoomKey) {
       lastRoomKey = roomKey;
       visitedRooms.add(roomKey);
       await shot(page, `roaming-${state.locationId}`);
+      await rushToTriggerZoneIfAny(page);
       const settled = await waitForOverlayOrSettle(page);
       if (anyOverlay(settled)) continue;
     }
