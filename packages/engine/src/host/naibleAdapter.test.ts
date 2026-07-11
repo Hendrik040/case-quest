@@ -25,6 +25,7 @@ import {
   JOB_STATUS_FAILED,
   JOB_RESULT_CHAT,
   JOB_RESULT_GRADING,
+  JOB_RESULT_MALFORMED,
   SUBMIT_FOR_GRADING_SIMULATION_COMPLETE,
   SUBMIT_FOR_GRADING_NEXT_SCENE,
   GRADE_PAYLOAD,
@@ -326,6 +327,20 @@ describe("NaibleAdapter.onSay — 202 queue fallback", () => {
 
     await expect(drain(adapter.onSay({ target: { actorId: "nick" }, text: "hi" }))).rejects.toThrow(/failed/i);
   });
+
+  it("throws (rather than silently yielding zero chunks) when the completed job's stored result has no chunks array", async () => {
+    const { adapter } = await startedAdapter(
+      (url) => {
+        if (url.endsWith("/api/simulation/linear-chat-stream")) return jsonResponse(202, QUEUED_202_RESPONSE);
+        if (url.includes("/status")) return jsonResponse(200, JOB_STATUS_COMPLETED);
+        if (url.includes("/result")) return jsonResponse(200, JOB_RESULT_MALFORMED);
+        throw new Error(`unexpected url in test: ${url}`);
+      },
+      { sleep: noSleep() },
+    );
+
+    await expect(drain(adapter.onSay({ target: { actorId: "nick" }, text: "hi" }))).rejects.toThrow(/chunks/);
+  });
 });
 
 // ---- start / onSceneWrapUp / onFinalGrade -------------------------------
@@ -419,6 +434,20 @@ describe("NaibleAdapter.onFinalGrade", () => {
     const grade = await adapter.onFinalGrade();
     expect(grade.overallScore).toBe(78);
     expect(grade.overallFeedback).toBe(JOB_RESULT_GRADING.grading.overall_feedback);
+  });
+
+  it("throws (rather than fabricating a zero grade) when the completed job's stored result has no grading object", async () => {
+    const { adapter } = await startedAdapter(
+      (url) => {
+        if (url.startsWith("/api/simulation/grade")) return jsonResponse(202, QUEUED_202_RESPONSE);
+        if (url.includes("/status")) return jsonResponse(200, JOB_STATUS_COMPLETED);
+        if (url.includes("/result")) return jsonResponse(200, JOB_RESULT_MALFORMED);
+        throw new Error(`unexpected url: ${url}`);
+      },
+      { sleep: noSleep() },
+    );
+
+    await expect(adapter.onFinalGrade()).rejects.toThrow(/grading/);
   });
 
   it("throws when start() has not been called yet", async () => {

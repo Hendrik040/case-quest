@@ -475,9 +475,10 @@ export class NaibleAdapter {
     let frames: AsyncGenerator<BackendFrame>;
     if (res.status === 202) {
       const result = await resolveQueuedJob(res, this.fetchFn, this.baseUrl, this.pollIntervalMs, this.pollMaxAttempts, this.sleep);
-      const rawChunks = Array.isArray(result.chunks)
-        ? (result.chunks as unknown[]).filter((c): c is string => typeof c === "string")
-        : [];
+      if (!Array.isArray(result.chunks)) {
+        throw new Error("naibleAdapter: queued chat job completed but its stored result is missing a chunks array (stale/malformed job result)");
+      }
+      const rawChunks = result.chunks.filter((c): c is string => typeof c === "string");
       frames = framesFromRawChunks(rawChunks);
     } else if (res.ok) {
       if (!res.body) throw new Error("naibleAdapter: linear-chat-stream response had no readable body");
@@ -534,7 +535,10 @@ export class NaibleAdapter {
     let payload: Record<string, unknown>;
     if (res.status === 202) {
       const result = await resolveQueuedJob(res, this.fetchFn, this.baseUrl, this.pollIntervalMs, this.pollMaxAttempts, this.sleep);
-      payload = (result.grading as Record<string, unknown> | undefined) ?? {};
+      if (typeof result.grading !== "object" || result.grading === null) {
+        throw new Error("naibleAdapter: queued grading job completed but its stored result is missing a grading object (stale/malformed job result)");
+      }
+      payload = result.grading as Record<string, unknown>;
     } else if (res.ok) {
       payload = (await res.json()) as Record<string, unknown>;
     } else {

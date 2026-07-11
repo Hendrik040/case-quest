@@ -85,6 +85,18 @@ export const JOB_RESULT_GRADING = {
   session_id: "a1b2c3d4-e5f6-4789-a0b1-c2d3e4f5a6b7",
 };
 
+/** Not a real backend shape — simulates a stale/malformed queued-job result
+ * (e.g. a cache entry written by a different backend version, or a partial
+ * write) where `/status` reports `"completed"` but the `/result` payload is
+ * missing the key the caller actually needs (`chunks` for a chat job,
+ * `grading` for a grading job). Used to test that the adapter throws
+ * diagnostically for this case rather than silently defaulting to an empty
+ * chat stream / a fabricated zero grade. */
+export const JOB_RESULT_MALFORMED = {
+  success: true,
+  session_id: "a1b2c3d4-e5f6-4789-a0b1-c2d3e4f5a6b7",
+};
+
 /** service.py:150-159 — `SUBMIT_FOR_GRADING` when the scene just completed
  * was the last one (`progression_result['simulation_complete']` true). */
 export const SUBMIT_FOR_GRADING_SIMULATION_COMPLETE = {
