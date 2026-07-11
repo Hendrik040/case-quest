@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { DebriefData } from "../../state/session";
+import type { GradePayload } from "../../App";
 import { MessageBox } from "./MessageBox";
 import { Typewriter } from "./Typewriter";
 
@@ -33,8 +34,16 @@ function buildBeats(data: DebriefData): string[] {
  * plus "THE END". That final panel is a terminal screen — once reached, no
  * further keydown/click handling is wired up (there is nothing left for the
  * player to advance to).
+ *
+ * `grade` (final review, C7): the platform's scorecard, when App has an
+ * `onFinalGrade` host callback wired and it has resolved by the time the
+ * player reaches the terminal panel — absent otherwise (no callback, or the
+ * fetch just hasn't settled yet/failed), in which case the terminal panel
+ * renders exactly as it always has. Deliberately minimal: an on-grammar
+ * score line plus whatever free-text feedback the platform sent, not a full
+ * rubric breakdown (the engine doesn't know the rubric's shape).
  */
-export function DebriefPages({ data }: { data: DebriefData }) {
+export function DebriefPages({ data, grade }: { data: DebriefData; grade?: GradePayload }) {
   const beats = useMemo(() => buildBeats(data), [data]);
   const [index, setIndex] = useState(0);
   const done = index >= beats.length;
@@ -55,6 +64,17 @@ export function DebriefPages({ data }: { data: DebriefData }) {
       {done && (
         <div className="cq-debrief-final" data-testid="debrief-final">
           <div className="cq-debrief-final-title">{data.ending.title}</div>
+          {grade && (
+            <div className="cq-debrief-grade" data-testid="debrief-grade">
+              {typeof grade.score === "number" && (
+                <div className="cq-debrief-grade-score">
+                  Platform score: {grade.score}
+                  {typeof grade.maxScore === "number" ? ` / ${grade.maxScore}` : ""}
+                </div>
+              )}
+              {grade.summary && <div className="cq-debrief-grade-summary">{grade.summary}</div>}
+            </div>
+          )}
           <div className="cq-debrief-final-tag">THE END</div>
         </div>
       )}

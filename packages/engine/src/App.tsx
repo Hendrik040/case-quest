@@ -114,7 +114,7 @@ type Overlay =
   | { kind: "fieldMsg"; text: string; then?: () => void }
   | { kind: "decisionPrompt" }
   | { kind: "decision" }
-  | { kind: "debrief"; data: DebriefData };
+  | { kind: "debrief"; data: DebriefData; grade?: GradePayload };
 
 // The agent bust sprite only varies by palette index (0-3), never by actor
 // identity beyond that — cache the four possible data-URLs once at module
@@ -168,6 +168,16 @@ export function App({ world: injectedWorld, callbacks }: AppProps) {
   // cancel a still-pending check from a previous one, and unmount can clear
   // it outright.
   const chainTimerRef = useRef<number | null>(null);
+  // Final review (C2): the host-submit guard for `onSceneWrapUp`. `handleMeetingWrapUp`
+  // (below) writes the `firstWrap` flag GameSession.meetingWrapUp() just reported here,
+  // synchronously, before `MeetingEncounter`'s own `handleWrapConfirmPick` goes on to
+  // invoke the `onSceneWrapUp` thunk passed as a prop (same click handler, same tick —
+  // no async gap) — that thunk reads it back to decide whether this wrap-up is the
+  // FIRST for this node (fire the real host callback) or a re-wrap of an already-wrapped
+  // node (standalone re-chat/re-wrap stays allowed locally; only the platform submit,
+  // which would otherwise re-fire SUBMIT_FOR_GRADING and desync the scene crosswalk, is
+  // suppressed).
+  const lastMeetingWrapRef = useRef(false);
 
   // Rule 5: unlock check — after a return-to-roaming or a field-message
   // dismissal, see whether the first live decision just became reachable.
@@ -362,6 +372,19 @@ export function App({ world: injectedWorld, callbacks }: AppProps) {
         factsGathered: session.gatheredFactIds().length,
         choices: data.choices.map((c) => c.chosenLabel),
       });
+      // Final review (C7): the platform grade never reached the debrief before this —
+      // `onFinalGrade` was defined and type-tested but had no caller. Fire it
+      // best-effort alongside the overlay (never blocking the debrief from showing):
+      // a rejection (network hiccup, host not wired to a live backend yet) must not
+      // break the debrief, so it's swallowed rather than surfaced — the ending's own
+      // local summary has already rendered regardless. The functional `setOverlay`
+      // update only applies the grade if the debrief overlay is still the live one
+      // (defensive; in practice debrief is terminal, but avoids stamping a grade onto
+      // whatever the player has since navigated to in some future non-terminal use).
+      callbacks?.onFinalGrade?.().then(
+        (grade) => setOverlay((prev) => (prev.kind === "debrief" ? { ...prev, grade } : prev)),
+        () => {},
+      );
       return;
     }
     // "node": chooseOption already moved the session to the new node's first
@@ -371,9 +394,16 @@ export function App({ world: injectedWorld, callbacks }: AppProps) {
     // rare already-at-venue edge case in `chooseOption` activates the next
     // node without ever calling `moveTo`, so `location:changed` never fires
     // for it — poll here too so that transition isn't silently dropped.
+    //
+    // Minor fix (final-review-minors.json, App.tsx:374): `reactToSceneActivation`
+    // already emits its own "scene:render" when there IS an activation — emitting a
+    // second, unconditional one right after was a redundant same-frame re-render of
+    // the (already-current) room. Only fall back to the explicit emit when there was
+    // no activation (the plain immediate-teleport case, which never renders otherwise).
     setOverlay({ kind: "none" });
-    reactToSceneActivation(session.pollSceneActivation());
-    busRef.current!.emit("scene:render", {});
+    const activation = session.pollSceneActivation();
+    if (activation) reactToSceneActivation(activation);
+    else busRef.current!.emit("scene:render", {});
     showLocationBanner();
   };
 
@@ -399,7 +429,8 @@ export function App({ world: injectedWorld, callbacks }: AppProps) {
 
   const handleMeetingWrapUp = () => {
     const session = sessionRef.current!;
-    session.meetingWrapUp();
+    const { firstWrap } = session.meetingWrapUp();
+    lastMeetingWrapRef.current = firstWrap;
     setOverlay({ kind: "none" });
     checkUnlock();
   };
@@ -462,7 +493,15 @@ export function App({ world: injectedWorld, callbacks }: AppProps) {
             onWrapUp={handleMeetingWrapUp}
             onSceneWrapUp={
               callbacks?.onSceneWrapUp
-                ? () => callbacks.onSceneWrapUp!(session.currentNode().platform_scene_id)
+                ? () => {
+                    // C2 host-submit guard: MeetingEncounter always fires this thunk
+                    // unconditionally on WRAP UP confirm (by design — its own tests
+                    // assert that in isolation); `handleMeetingWrapUp` (called first, same
+                    // click handler) has just recorded whether THIS wrap-up was the node's
+                    // first. Only the first ever reaches the real host callback.
+                    if (!lastMeetingWrapRef.current) return Promise.resolve({});
+                    return callbacks.onSceneWrapUp!(session.currentNode().platform_scene_id);
+                  }
                 : undefined
             }
           />
@@ -509,7 +548,7 @@ export function App({ world: injectedWorld, callbacks }: AppProps) {
           );
         })()}
 
-        {overlay.kind === "debrief" && <DebriefPages data={overlay.data} />}
+        {overlay.kind === "debrief" && <DebriefPages data={overlay.data} grade={overlay.grade} />}
       </div>
     </div>
   );

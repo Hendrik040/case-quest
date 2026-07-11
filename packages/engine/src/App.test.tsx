@@ -305,6 +305,196 @@ describe("App — meeting overlay wiring (Task 2.3)", () => {
 
     expect(onSceneWrapUp).toHaveBeenCalledWith(7);
   });
+
+  // Final review (C2): re-opening and re-wrapping an already-wrapped node used to fire
+  // a second onSceneWrapUp (duplicate SUBMIT_FOR_GRADING) — the platform would advance
+  // the scene crosswalk a second time while the engine is still on the same node.
+  it("does not re-fire onSceneWrapUp for a node whose meeting has already been wrapped up (re-open + re-wrap is a local no-op for the host submit)", async () => {
+    const worldWithScene = WorldSchema.parse({ ...worldJson, nodes: (worldJson as { nodes: unknown[] }).nodes.map((n, i) => (i === 0 ? { ...(n as object), platform_scene_id: 7 } : n)) });
+    const onSceneWrapUp = vi.fn().mockResolvedValue({ complete: true });
+    await mountWorld(worldWithScene, { onSceneWrapUp });
+
+    act(() => cqBus().emit("encounter:meeting:start", { actorIds: ["roaster", "buyer"] }));
+    act(() => clickByText(container, "meeting-action-menu", "WRAP UP"));
+    await act(async () => {
+      clickByText(container, "choice-box", "YES");
+      await Promise.resolve();
+    });
+    expect(onSceneWrapUp).toHaveBeenCalledTimes(1);
+    expect(cqSession().hasWrappedUp(cqSession().currentNode().id)).toBe(true);
+
+    // Standalone re-chat stays allowed: re-opening the SAME node's meeting still works.
+    act(() => cqBus().emit("encounter:meeting:start", { actorIds: ["roaster", "buyer"] }));
+    expect(container.querySelector('[data-testid="meeting-encounter"]')).not.toBeNull();
+    act(() => clickByText(container, "meeting-action-menu", "WRAP UP"));
+    await act(async () => {
+      clickByText(container, "choice-box", "YES");
+      await Promise.resolve();
+    });
+
+    // Still exactly once — the second wrap-up must not re-submit.
+    expect(onSceneWrapUp).toHaveBeenCalledTimes(1);
+    expect(cqSession().mode()).toBe("roaming");
+  });
+});
+
+// Final review (C7): `onFinalGrade` was defined and type-tested but had no caller —
+// the debrief never showed the platform's actual score. A decision leading straight to
+// an ending (kept minimal — no facts/actors needed) exercises App's debrief-entry path
+// end to end.
+function endingWorld(): World {
+  return WorldSchema.parse({
+    schema_version: "0.2",
+    meta: {
+      case_id: "ending-test", title: "Ending Test",
+      synopsis: "Exercises App's onFinalGrade wiring on debrief entry.",
+      protagonist_actor_id: "player", start_node_id: "node_a",
+    },
+    learning_objectives: [{ id: "lo1", text: "objective" }],
+    actors: [
+      {
+        id: "player", name: "Player", role: "protagonist", is_playable: true,
+        persona: { background: "", personality: "", communication_style: "" },
+        goals: [], knowledge: [],
+      },
+    ],
+    locations: [{ id: "loc_a", name: "Office", type: "office", exits: [] }],
+    facts: [],
+    decisions: [
+      {
+        id: "decide", prompt: "Finish?", requires_facts: [],
+        options: [{ id: "fin", label: "Finish", consequence_text: "c", illuminates: ["lo1"], leads_to: "end_good" }],
+      },
+    ],
+    nodes: [
+      {
+        id: "node_a", title: "Node A", accessible_locations: ["loc_a"],
+        present_actors: [], available_facts: [], live_decisions: ["decide"],
+      },
+    ],
+    endings: [
+      { id: "end_good", title: "Good", summary: "s", real_case_comparison: "r", lo_outcomes: [{ lo_id: "lo1", verdict: "v" }] },
+    ],
+  });
+}
+
+/** Clicks the currently-mounted `Typewriter` until the debrief's terminal panel shows
+ * (first click fully types the current page instantly; the next advances/onDone's it —
+ * see Typewriter.tsx's `advance`). Mirrors e2e-drive.mjs's `exhaustTypewriter`. */
+function exhaustDebrief(container: HTMLElement, maxClicks = 40) {
+  for (let i = 0; i < maxClicks; i++) {
+    if (container.querySelector('[data-testid="debrief-final"]')) return;
+    const tw = container.querySelector<HTMLElement>('[data-testid="typewriter"]');
+    if (!tw) throw new Error("exhaustDebrief: no typewriter and no debrief-final");
+    act(() => tw.click());
+  }
+  throw new Error("exhaustDebrief: never reached debrief-final");
+}
+
+/**
+ * Drives `endingWorld()`'s single zero-fact decision to its ending through the REAL UI
+ * (not by calling `session.chooseOption` directly, which would bypass App's own
+ * `handleDecisionCommit` — exactly the handler C7's fix lives in): Enter (Rule 7's
+ * global shortcut, since the decision is unlocked from boot with zero required facts)
+ * -> click through the prompt typewriter -> pick "Finish" -> confirm YES -> submit
+ * reasoning. Lands on the "debrief" overlay when this returns.
+ */
+async function commitEndingDecision(container: HTMLElement) {
+  await act(async () => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await Promise.resolve();
+  });
+  await waitVisible(container, "decision-encounter");
+  const tw = container.querySelector<HTMLElement>('[data-testid="typewriter"]')!;
+  act(() => tw.click()); // fully type the prompt instantly
+  act(() => tw.click()); // advance prompt -> options
+  act(() => clickByText(container, "choice-box", "Finish"));
+  act(() => clickByText(container, "choice-box", "YES"));
+  const textarea = container.querySelector<HTMLTextAreaElement>('[data-testid="reasoning-textarea"]')!;
+  act(() => {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")!.set!;
+    setter.call(textarea, "This is the defensible call.");
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => {
+    container.querySelector<HTMLElement>('[data-testid="reasoning-submit"]')!.click();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
+async function waitVisible(container: HTMLElement, testid: string, timeoutMs = 1000): Promise<void> {
+  const start = Date.now();
+  while (!container.querySelector(`[data-testid="${testid}"]`)) {
+    if (Date.now() - start > timeoutMs) throw new Error(`waitVisible: [data-testid="${testid}"] never appeared`);
+    // eslint-disable-next-line no-await-in-loop
+    await act(async () => { await Promise.resolve(); });
+  }
+}
+
+describe("App — final grade wiring (C7)", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+  });
+
+  afterEach(() => {
+    act(() => root?.unmount());
+    container.remove();
+  });
+
+  async function mountEndingWorld(callbacks?: CaseQuestCallbacks) {
+    await act(async () => {
+      root = createRoot(container);
+      root.render(<App world={endingWorld()} callbacks={callbacks} />);
+      await Promise.resolve();
+    });
+  }
+
+  it("calls onFinalGrade on entering debrief and renders the returned grade in the terminal panel", async () => {
+    const onFinalGrade = vi.fn().mockResolvedValue({ score: 92, maxScore: 100, summary: "Nice work." });
+    await mountEndingWorld({ onFinalGrade });
+
+    await commitEndingDecision(container);
+
+    expect(onFinalGrade).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('[data-testid="debrief"]')).not.toBeNull();
+
+    exhaustDebrief(container);
+    expect(container.querySelector('[data-testid="debrief-grade"]')?.textContent).toContain("92");
+    expect(container.querySelector('[data-testid="debrief-grade"]')?.textContent).toContain("Nice work.");
+  });
+
+  it("a rejecting onFinalGrade does not break the debrief (error-tolerant, no unhandled rejection)", async () => {
+    const onFinalGrade = vi.fn().mockRejectedValue(new Error("grade service down"));
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+
+    try {
+      await mountEndingWorld({ onFinalGrade });
+      await commitEndingDecision(container);
+
+      expect(onFinalGrade).toHaveBeenCalledTimes(1);
+      exhaustDebrief(container);
+      expect(container.querySelector('[data-testid="debrief-grade"]')).toBeNull();
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
+  it("without an onFinalGrade callback, the debrief is unchanged (no grade section)", async () => {
+    await mountEndingWorld(undefined);
+    await commitEndingDecision(container);
+
+    exhaustDebrief(container);
+    expect(container.querySelector('[data-testid="debrief-grade"]')).toBeNull();
+    expect(container.querySelector('[data-testid="debrief-final"]')).not.toBeNull();
+  });
 });
 
 // Task 1.5's BINDING for Task 2.3: after a traversal `moveTo` lands on the
