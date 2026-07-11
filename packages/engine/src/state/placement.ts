@@ -39,7 +39,7 @@ export function homeLocationForActor(world: World, node: StoryNode, actorId: str
 // types enumerated in `packages/schema/src/validate.ts`'s `OUTDOOR_ROUTE_TYPES`.
 const VENUE_LOCATION_TYPES = new Set(["boardroom", "street", "shopfront", "client_site"]);
 
-function venueLocationId(world: World, node: StoryNode): string | undefined {
+export function venueLocationId(world: World, node: StoryNode): string | undefined {
   for (const lid of node.accessible_locations) {
     const location = world.locations.find((l) => l.id === lid);
     if (location && VENUE_LOCATION_TYPES.has(location.type)) return lid;

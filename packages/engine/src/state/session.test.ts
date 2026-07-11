@@ -297,3 +297,138 @@ describe("GameSession — multi-node decision path", () => {
     expect(s.pollDecisionPrompt()).toBe(true);
   });
 });
+
+describe("GameSession — spatial traversal (route locations + venue)", () => {
+  // A two-node world where node_b has a venue-typed location (boardroom), and node_a
+  // has a route_location (a street) linking node_a's office to node_b's venue. Exercises
+  // the traversing sub-state: chooseOption no longer teleports outright when the next node
+  // has a venue; the player must walk the route to trigger node activation.
+  function routedWorld(): World {
+    return WorldSchema.parse({
+      schema_version: "0.2",
+      meta: {
+        case_id: "routed-test",
+        title: "Routed Test World",
+        synopsis: "A minimal two-node world exercising spatial traversal via route_locations.",
+        protagonist_actor_id: "player",
+        start_node_id: "node_a",
+      },
+      learning_objectives: [],
+      actors: [
+        {
+          id: "player", name: "Player", role: "protagonist", is_playable: true,
+          persona: { background: "", personality: "", communication_style: "" },
+          goals: [], knowledge: [],
+        },
+        {
+          id: "npc_a", name: "Ann", role: "npc", is_playable: false,
+          persona: { background: "", personality: "", communication_style: "" },
+          goals: [], knowledge: ["fact_a"],
+          dialogue: { greeting: "Hi from A", topics: [{ fact_id: "fact_a", line: "Fact A revealed." }] },
+        },
+        {
+          id: "npc_b", name: "Ben", role: "npc", is_playable: false,
+          persona: { background: "", personality: "", communication_style: "" },
+          goals: [], knowledge: ["fact_b"],
+          dialogue: { greeting: "Hi from B", topics: [{ fact_id: "fact_b", line: "Fact B revealed." }] },
+        },
+      ],
+      locations: [
+        { id: "loc_a_office", name: "Office A", type: "office", exits: ["loc_street"] },
+        { id: "loc_street", name: "Connecting Street", type: "street", exits: ["loc_a_office", "loc_b_venue", "loc_dead_end"] },
+        { id: "loc_dead_end", name: "Dead End Alley", type: "street", exits: ["loc_street"] },
+        { id: "loc_b_venue", name: "Boardroom B", type: "boardroom", exits: ["loc_street"] },
+      ],
+      facts: [
+        { id: "fact_a", label: "Fact A", content: "content a", sources: [{ actor_id: "npc_a", location_id: "loc_a_office" }] },
+        { id: "fact_b", label: "Fact B", content: "content b", sources: [{ actor_id: "npc_b", location_id: "loc_b_venue" }] },
+      ],
+      decisions: [
+        {
+          id: "decide_a", prompt: "Move to node B?", requires_facts: ["fact_a"],
+          options: [{ id: "go_b", label: "Go to node B", consequence_text: "You head to node B.", illuminates: [], leads_to: "node_b" }],
+        },
+        {
+          id: "decide_b", prompt: "Finish?", requires_facts: ["fact_b"],
+          options: [{ id: "finish", label: "Finish", consequence_text: "You finish.", illuminates: [], leads_to: "end_final" }],
+        },
+      ],
+      nodes: [
+        {
+          id: "node_a", title: "Node A", accessible_locations: ["loc_a_office"], route_locations: ["loc_street"],
+          present_actors: ["npc_a"], available_facts: ["fact_a"], live_decisions: ["decide_a"],
+        },
+        {
+          id: "node_b", title: "Node B", accessible_locations: ["loc_b_venue"],
+          present_actors: ["npc_b"], available_facts: ["fact_b"], live_decisions: ["decide_b"],
+        },
+      ],
+      endings: [
+        { id: "end_final", title: "The End", summary: "You reached the end.", real_case_comparison: "n/a", lo_outcomes: [] },
+      ],
+    });
+  }
+
+  function reachDecisionA(s: GameSession) {
+    s.maybeStartChain();
+    s.encounterAsk("fact_a");
+    s.encounterMoveOn();
+    s.startDecision("decide_a");
+  }
+
+  it("chooseOption enters traversing (not an immediate teleport) when the next node has a venue", () => {
+    const s = new GameSession(routedWorld());
+    reachDecisionA(s);
+    const r = s.chooseOption("decide_a", "go_b", "moving on");
+
+    expect(r.endedAt).toBe("node");
+    expect(s.mode()).toBe("traversing");
+    // still physically in node_a's world, at the same location, until arrival
+    expect(s.currentNode().id).toBe("node_a");
+    expect(s.currentLocationId()).toBe("loc_a_office");
+    // walkable set now includes node_a's route location + node_b's venue
+    const ids = s.accessibleLocations().map((l) => l.id).sort();
+    expect(ids).toEqual(["loc_a_office", "loc_b_venue", "loc_street"]);
+  });
+
+  it("moving through the route and arriving at the next venue activates node B and reports the transition", () => {
+    const s = new GameSession(routedWorld());
+    reachDecisionA(s);
+    s.chooseOption("decide_a", "go_b", "moving on");
+
+    s.moveTo("loc_street");
+    expect(s.mode()).toBe("traversing");
+    expect(s.pollSceneActivation()).toBeNull(); // not there yet
+
+    s.moveTo("loc_b_venue");
+    expect(s.currentNode().id).toBe("node_b");
+    expect(s.currentLocationId()).toBe("loc_b_venue");
+    expect(s.mode()).toBe("roaming");
+    expect(s.pollSceneActivation()).toEqual({ fromNodeId: "node_a", toNodeId: "node_b" });
+    expect(s.pollSceneActivation()).toBeNull(); // one-shot, like pollDecisionPrompt
+
+    // node B re-arms normally after arrival
+    const view = s.maybeStartChain();
+    expect(view?.actorId).toBe("npc_b");
+  });
+
+  it("rejects moving to a location outside the extended walkable set mid-traversal", () => {
+    const s = new GameSession(routedWorld());
+    reachDecisionA(s);
+    s.chooseOption("decide_a", "go_b", "moving on");
+    s.moveTo("loc_street");
+    // loc_dead_end is exit-connected from loc_street but is neither node_a's accessible/route
+    // location nor node_b's venue — must stay rejected even while traversing.
+    expect(() => s.moveTo("loc_dead_end")).toThrow();
+  });
+
+  it("blocks starting encounters/decisions mid-traversal, same as any other non-roaming mode", () => {
+    const s = new GameSession(routedWorld());
+    reachDecisionA(s);
+    s.chooseOption("decide_a", "go_b", "moving on");
+    expect(s.mode()).toBe("traversing");
+    expect(s.maybeStartChain()).toBeNull();
+    expect(() => s.startEncounterWith("npc_a")).toThrow();
+    expect(() => s.startDecision("decide_b")).toThrow();
+  });
+});

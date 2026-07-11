@@ -1,7 +1,7 @@
 import type {
   World, StoryNode, Location, Actor, Decision, LearningObjective, Ending,
 } from "@case-quest/schema";
-import { resolvePlacement } from "./placement";
+import { resolvePlacement, venueLocationId } from "./placement";
 
 export interface ChoiceRecord { decisionId: string; optionId: string; reasoning: string; }
 export interface DebriefData {
@@ -9,8 +9,9 @@ export interface DebriefData {
   objectives: { objective: LearningObjective; verdict: string }[];
   choices: { prompt: string; chosenLabel: string; reasoning: string }[];
 }
+export interface SceneActivation { fromNodeId: string; toNodeId: string; }
 
-export type SessionMode = "roaming" | "encounter" | "decision" | "debrief";
+export type SessionMode = "roaming" | "encounter" | "decision" | "traversing" | "debrief";
 export interface EncounterTopic { factId: string; label: string; asked: boolean; }
 export interface EncounterView {
   actorId: string; name: string; role: string; greeting?: string;
@@ -32,11 +33,21 @@ export class GameSession {
   private readonly choices: ChoiceRecord[] = [];
   private endingId: string | null = null;
 
-  private internalMode: "roaming" | "encounter" | "decision" = "roaming";
+  private internalMode: "roaming" | "encounter" | "decision" | "traversing" = "roaming";
   private chain: string[] = [];
   private chainIdx = 0;
   private readonly visited = new Set<string>();
   private decisionPrompted = false;
+
+  // Traversal sub-state (M5 spatial progression): set by chooseOption when the next node
+  // has a venue-typed location. The player keeps walking within the COMPLETED node's world
+  // (currentNodeId doesn't change yet) until they reach the next node's venue via moveTo,
+  // which triggers arriveAtNextNode(). sceneActivation is a one-shot poll flag, mirroring
+  // the existing pollDecisionPrompt() idiom, so callers (WorldScene/App, Task 1.6) can
+  // detect the transition and emit their own bus event without GameSession depending on
+  // bridge/events.ts (GameSession stays network/UI-free).
+  private traversal: { toNodeId: string; targetLocationId: string; routeLocations: string[] } | null = null;
+  private sceneActivation: SceneActivation | null = null;
 
   constructor(world: World) {
     this.worldRef = world;
@@ -60,7 +71,21 @@ export class GameSession {
   }
   currentLocationId(): string { return this.locationId; }
   accessibleLocations(): Location[] {
-    return this.currentNode().accessible_locations.map((id) => this.locationsById.get(id)!).filter(Boolean);
+    return this.walkableLocationIds().map((id) => this.locationsById.get(id)!).filter(Boolean);
+  }
+
+  // The walkable set while traversing extends the completed node's accessible_locations
+  // with its route_locations and the next node's venue (the traversal target).
+  private walkableLocationIds(): string[] {
+    const node = this.currentNode();
+    if (this.internalMode === "traversing" && this.traversal) {
+      return [...new Set([
+        ...node.accessible_locations,
+        ...this.traversal.routeLocations,
+        this.traversal.targetLocationId,
+      ])];
+    }
+    return node.accessible_locations;
   }
   presentActors(): Actor[] {
     return this.currentNode().present_actors.map((id) => this.actorsById.get(id)!).filter(Boolean);
@@ -88,6 +113,15 @@ export class GameSession {
 
   // --- encounter machine ---
   mode(): SessionMode { return this.isEnded() ? "debrief" : this.internalMode; }
+
+  // One-shot poll for the traversal→next-node transition, mirroring pollDecisionPrompt()'s
+  // idiom: returns the transition exactly once, then clears it. WorldScene/App (Task 1.6)
+  // is expected to translate a non-null result into a `scene:activate` bus event.
+  pollSceneActivation(): SceneActivation | null {
+    const activation = this.sceneActivation;
+    this.sceneActivation = null;
+    return activation;
+  }
 
   private topicsForActor(actor: Actor): EncounterTopic[] {
     const available = new Set(this.currentNode().available_facts);
@@ -199,14 +233,30 @@ export class GameSession {
 
   moveTo(locationId: string): void {
     this.assertActive();
-    const node = this.currentNode();
     const current = this.locationsById.get(this.locationId)!;
-    const accessible = node.accessible_locations.includes(locationId);
+    const accessible = this.walkableLocationIds().includes(locationId);
     const connected = current.exits.includes(locationId);
     if (!accessible || !connected) {
       throw new Error(`cannot move to "${locationId}" from "${this.locationId}"`);
     }
     this.locationId = locationId;
+    if (this.internalMode === "traversing" && this.traversal && locationId === this.traversal.targetLocationId) {
+      this.arriveAtNextNode();
+    }
+  }
+
+  // Arrival at the traversal target: activates node N+1 exactly like the pre-traversal
+  // teleport did (roaming, visited/decisionPrompted reset), plus records the one-shot
+  // sceneActivation transition for pollSceneActivation().
+  private arriveAtNextNode(): void {
+    const fromNodeId = this.currentNodeId;
+    const toNodeId = this.traversal!.toNodeId;
+    this.currentNodeId = toNodeId;
+    this.internalMode = "roaming";
+    this.traversal = null;
+    this.visited.clear();
+    this.decisionPrompted = false;
+    this.sceneActivation = { fromNodeId, toNodeId };
   }
 
   gatherFactsFromActor(actorId: string): { greeting?: string; revealed: { factId: string; line: string }[] } {
@@ -253,11 +303,34 @@ export class GameSession {
       this.endingId = option.leads_to;
       return { endedAt: "ending" };
     }
-    this.currentNodeId = option.leads_to;
-    this.locationId = this.currentNode().accessible_locations[0];
-    this.internalMode = "roaming";
-    this.visited.clear();
-    this.decisionPrompted = false;
+    const completedNode = node;
+    const nextNode = this.nodesById.get(option.leads_to)!;
+    const venue = venueLocationId(this.worldRef, nextNode);
+    if (!venue) {
+      // Fallback rule: no venue-typed location in the next node (e.g. pre-traversal worlds
+      // like wholesale-offer) → keep the original immediate-teleport behavior unchanged.
+      this.currentNodeId = nextNode.id;
+      this.locationId = nextNode.accessible_locations[0];
+      this.internalMode = "roaming";
+      this.visited.clear();
+      this.decisionPrompted = false;
+    } else if (this.locationId === venue) {
+      // Defensive edge case: the player already happens to be standing on the next node's
+      // venue location (e.g. a shared location id across nodes) — arrive immediately rather
+      // than requiring a no-op moveTo that would never come.
+      this.currentNodeId = nextNode.id;
+      this.internalMode = "roaming";
+      this.visited.clear();
+      this.decisionPrompted = false;
+      this.sceneActivation = { fromNodeId: completedNode.id, toNodeId: nextNode.id };
+    } else {
+      this.traversal = {
+        toNodeId: nextNode.id,
+        targetLocationId: venue,
+        routeLocations: [...(completedNode.route_locations ?? [])],
+      };
+      this.internalMode = "traversing";
+    }
     return { endedAt: "node" };
   }
 
