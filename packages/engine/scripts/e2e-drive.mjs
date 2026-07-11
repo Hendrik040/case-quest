@@ -67,12 +67,24 @@
 //
 // Usage:
 //   pnpm -C packages/engine dev &            # dev server must already be up
-//   pnpm -C packages/engine e2e              # full playthrough
+//   pnpm -C packages/engine e2e              # DEFAULT GATE (final review, C5): runs BOTH
+//                                             # the toy-world playthrough below AND, right
+//                                             # after, a second pass over case3-m5.world.json
+//                                             # with CQ_EXPECT_MEETINGS=4 (see package.json's
+//                                             # "e2e" script) — no env flag needed. This is
+//                                             # what closes the B1/B2 crash-guard class (a
+//                                             # venue emitting encounter:meeting:start with
+//                                             # zero seated actors) under the DEFAULT gate,
+//                                             # not just as tribal-knowledge opt-in.
+//   pnpm -C packages/engine e2e:toy          # just the toy-world playthrough (this file's
+//                                             # own default world, no env vars)
+//   pnpm -C packages/engine e2e:meetings     # just the case3-m5 meetings pass, standalone
 //   pnpm -C packages/engine e2e --smoke      # boot through the first beat, then stop
-//   CQ_WORLD_URL=/worlds/other.world.json pnpm -C packages/engine e2e
-//                                             # drive a different world; unset,
-//                                             # behavior is unchanged.
-//   CQ_EXPECT_MEETINGS=4 CQ_WORLD_URL=/worlds/case3-m5.world.json pnpm -C packages/engine e2e
+//   CQ_WORLD_URL=/worlds/other.world.json pnpm -C packages/engine e2e:toy
+//                                             # drive a different world directly (this
+//                                             # script only, not the combined "e2e" gate)
+//   CQ_EXPECT_MEETINGS=4 CQ_WORLD_URL=/worlds/case3-m5.world.json node scripts/e2e-drive.mjs
+//                                             # equivalent to "e2e:meetings", spelled out —
 //                                             # additionally assert the exact number of
 //                                             # "meeting" overlays driven; unset, no assertion.
 //
@@ -105,13 +117,22 @@ const BASE_URL = process.env.CQ_E2E_URL ?? "http://localhost:5173";
 const CQ_WORLD_URL = process.env.CQ_WORLD_URL;
 const GOTO_URL = CQ_WORLD_URL ? `${BASE_URL}?world=${encodeURIComponent(CQ_WORLD_URL)}` : BASE_URL;
 const SMOKE = process.argv.includes("--smoke");
-// Optional hard assertion (kept world-agnostic like everything else here — unset by
-// default, so the M4 toy world's run is unaffected): the exact number of "meeting" overlay
-// encounters (`runMeetingTurn` calls) the whole playthrough must drive through. Set this
-// when a world's meeting-count is known (e.g. case3-m5.world.json's 4 venues) so a
-// regression that silently falls back to the legacy per-actor chain somewhere — the exact
-// failure mode the Task 5.2 review fixed (B1/B2) — fails the run loudly instead of merely
-// not being screenshotted.
+// Optional hard assertion (kept world-agnostic like everything else here — unset for
+// THIS script's own default world, so the M4 toy-world run is unaffected): the exact
+// number of "meeting" overlay encounters (`runMeetingTurn` calls) the whole playthrough
+// must drive through. Set this when a world's meeting-count is known (e.g.
+// case3-m5.world.json's 4 venues) so a regression that silently falls back to the
+// legacy per-actor chain somewhere — the exact failure mode the Task 5.2 review fixed
+// (B1/B2) — fails the run loudly instead of merely not being screenshotted.
+//
+// Final review (C5): this used to be opt-in ONLY (no committed script ever set it, no
+// CI, README only documented the generic CQ_WORLD_URL override) — a future regression
+// in this crash-guard class could ship with `pnpm test`/`typecheck`/`build`/a plain
+// `pnpm e2e` all green. `packages/engine/package.json`'s "e2e" script now ALWAYS runs
+// this exact CQ_WORLD_URL/CQ_EXPECT_MEETINGS combination as a second pass, right after
+// the toy-world playthrough — see "e2e:meetings" there and this file's own header
+// comment. Still a plain env var here (not baked into a flag this file reads itself)
+// so `e2e:toy`/`e2e:meetings` stay simple, independently runnable single-world drives.
 const CQ_EXPECT_MEETINGS = process.env.CQ_EXPECT_MEETINGS !== undefined ? Number(process.env.CQ_EXPECT_MEETINGS) : null;
 
 // Hard cap on strategy-loop iterations (each iteration dispatches one action:

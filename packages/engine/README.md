@@ -71,11 +71,36 @@ pnpm -C packages/engine build
 ```bash
 pnpm -C packages/schema build
 (pnpm -C packages/engine dev &) && sleep 3   # dev server must be up first
-pnpm -C packages/engine e2e                  # plays the whole case, screenshots every beat
+pnpm -C packages/engine e2e                  # DEFAULT GATE: the toy-world playthrough
+                                             # below, THEN a second pass over
+                                             # case3-m5.world.json asserting all 4 venues'
+                                             # meetings fire (CQ_EXPECT_MEETINGS=4) — see
+                                             # "Meeting-world regression gate" below.
+pnpm -C packages/engine e2e:toy              # just the toy-world playthrough (screenshots
+                                             # every beat), no meetings assertion
 pnpm -C packages/engine e2e --smoke          # boot through the first beat, then stop
-CQ_WORLD_URL=/worlds/other.world.json pnpm -C packages/engine e2e
-                                             # play a different world (any valid v0.1)
+CQ_WORLD_URL=/worlds/other.world.json pnpm -C packages/engine e2e:toy
+                                             # play a different world directly (any valid
+                                             # v0.1/v0.2 world), bypassing the combined gate
 ```
+
+### Meeting-world regression gate (`e2e:meetings`)
+
+```bash
+pnpm -C packages/engine e2e:meetings
+# equivalent to: CQ_WORLD_URL=/worlds/case3-m5.world.json CQ_EXPECT_MEETINGS=4 \
+#   node scripts/e2e-drive.mjs
+```
+
+Drives `case3-m5.world.json` (the M5 traversal/meeting-encounters world: 2 boardrooms +
+1 shopfront + 1 client_site) end to end and hard-fails if the driver doesn't open exactly
+4 "meeting" overlays. This is the regression check for the B1/B2 crash-guard class — a
+venue's `encounter:meeting:start` firing with zero seated actors (or a future
+template/placement change accidentally routing a venue back into the legacy per-actor
+auto-chain) — and it is now part of the **default** `pnpm -C packages/engine e2e` gate
+(chained right after the toy-world playthrough in `package.json`), not just tribal
+knowledge in a code comment; run it standalone with the command above when iterating on
+just this world.
 
 `scripts/e2e-drive.mjs` (headless real Chrome via `playwright-core`, no
 bundled Chromium download) plays any valid world.json v0.1 world start to
