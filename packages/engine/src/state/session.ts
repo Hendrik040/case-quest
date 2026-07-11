@@ -11,11 +11,23 @@ export interface DebriefData {
 }
 export interface SceneActivation { fromNodeId: string; toNodeId: string; }
 
-export type SessionMode = "roaming" | "encounter" | "decision" | "traversing" | "debrief";
+export type SessionMode = "roaming" | "encounter" | "decision" | "meeting" | "traversing" | "debrief";
 export interface EncounterTopic { factId: string; label: string; asked: boolean; }
 export interface EncounterView {
   actorId: string; name: string; role: string; greeting?: string;
   topics: EncounterTopic[]; chainIndex: number; chainLength: number;
+}
+
+// Multi-party meeting (M5, Phase 2): a scene's seated participants (venue table/stalls)
+// are all "in the room" at once, rather than being asked in a fixed chain like the
+// single-NPC encounter. paletteIndex mirrors App.tsx's actorPaletteIndex convention
+// (index within the current node's present_actors, mod 4) so the overlay can reuse the
+// same bust art without GameSession depending on the UI layer.
+export interface MeetingParticipant { actorId: string; name: string; role: string; paletteIndex: number; }
+export interface MeetingView {
+  participants: MeetingParticipant[];
+  activeActorId: string;
+  topicsByActor: Record<string, EncounterTopic[]>;
 }
 
 export class GameSession {
@@ -33,11 +45,18 @@ export class GameSession {
   private readonly choices: ChoiceRecord[] = [];
   private endingId: string | null = null;
 
-  private internalMode: "roaming" | "encounter" | "decision" = "roaming";
+  private internalMode: "roaming" | "encounter" | "decision" | "meeting" = "roaming";
   private chain: string[] = [];
   private chainIdx = 0;
   private readonly visited = new Set<string>();
   private decisionPrompted = false;
+
+  // Meeting sub-state (M5, Phase 2): the seated participants and whichever of them is
+  // currently "speaking" in the overlay. Mirrors chain/chainIdx's role for the single-NPC
+  // encounter, but there's no chain progression here — the player freely switches active
+  // speaker (meetingSetActive) and asks any open topic of any participant (meetingAsk).
+  private meetingParticipants: string[] = [];
+  private meetingActiveActorId: string | null = null;
 
   // Traversal sub-state (M5 spatial progression): set by chooseOption when the next node
   // has a venue-typed location. The player keeps walking within the COMPLETED node's world
@@ -215,7 +234,74 @@ export class GameSession {
     return { next: this.buildEncounterView() };
   }
 
+  // --- meeting machine (M5, Phase 2: multi-party venue encounters) ---
+  private buildMeetingView(): MeetingView {
+    const topicsByActor: Record<string, EncounterTopic[]> = {};
+    const participants = this.meetingParticipants.map((actorId) => {
+      const actor = this.actorsById.get(actorId)!;
+      topicsByActor[actorId] = this.topicsForActor(actor);
+      return {
+        actorId,
+        name: actor.name,
+        role: actor.role,
+        paletteIndex: this.currentNode().present_actors.indexOf(actorId) % 4,
+      };
+    });
+    return { participants, activeActorId: this.meetingActiveActorId!, topicsByActor };
+  }
+
+  startMeeting(actorIds: string[]): MeetingView {
+    this.assertActive();
+    if (this.internalMode !== "roaming") throw new Error("cannot start a meeting outside roaming");
+    if (actorIds.length === 0) throw new Error("a meeting requires at least one participant");
+    for (const id of actorIds) {
+      if (!this.actorsById.has(id)) throw new Error(`unknown actor "${id}"`);
+    }
+    this.meetingParticipants = [...actorIds];
+    this.meetingActiveActorId = actorIds[0];
+    this.internalMode = "meeting";
+    return this.buildMeetingView();
+  }
+
+  meetingState(): MeetingView | null {
+    if (this.internalMode !== "meeting") return null;
+    return this.buildMeetingView();
+  }
+
+  meetingAsk(actorId: string, factId: string): { line: string } {
+    this.assertActive();
+    if (this.internalMode !== "meeting") throw new Error("no meeting in progress");
+    if (!this.meetingParticipants.includes(actorId)) throw new Error(`"${actorId}" is not a meeting participant`);
+    const actor = this.actorsById.get(actorId)!;
+    const topic = this.topicsForActor(actor).find((t) => t.factId === factId);
+    if (!topic || topic.asked) throw new Error(`"${factId}" is not an open topic for "${actorId}"`);
+    const dialogueTopic = actor.dialogue?.topics?.find((t) => t.fact_id === factId);
+    const fact = this.worldRef.facts.find((f) => f.id === factId);
+    const line = dialogueTopic?.line ?? (fact ? `${fact.label}: ${fact.content}` : factId);
+    this.gathered.add(factId);
+    return { line };
+  }
+
+  meetingSetActive(actorId: string): void {
+    this.assertActive();
+    if (this.internalMode !== "meeting") throw new Error("no meeting in progress");
+    if (!this.meetingParticipants.includes(actorId)) throw new Error(`"${actorId}" is not a meeting participant`);
+    this.meetingActiveActorId = actorId;
+  }
+
+  meetingWrapUp(): void {
+    this.assertActive();
+    if (this.internalMode !== "meeting") throw new Error("no meeting in progress");
+    this.internalMode = "roaming";
+    this.meetingParticipants = [];
+    this.meetingActiveActorId = null;
+  }
+
   pollDecisionPrompt(): boolean {
+    // Decisions never prompt while an encounter/decision/meeting overlay is up, or
+    // mid-traversal — only once the session is plainly roaming (or traversing, which is
+    // handled by the traversal check below).
+    if (this.internalMode !== "roaming") return false;
     if (this.traversal) return false; // decisions never prompt mid-traversal
     if (this.decisionPrompted) return false;
     const first = this.liveDecisions()[0];

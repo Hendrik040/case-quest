@@ -207,6 +207,105 @@ describe("GameSession — encounter machine", () => {
   });
 });
 
+describe("GameSession — meeting machine (multi-party)", () => {
+  it("startMeeting seats the given actors and builds per-actor topics", () => {
+    const s = newSession();
+    const v = s.startMeeting(["roaster", "buyer"]);
+    expect(s.mode()).toBe("meeting");
+    expect(v.participants.map((p) => p.actorId)).toEqual(["roaster", "buyer"]);
+    expect(v.participants[0]).toEqual({ actorId: "roaster", name: "Sam", role: expect.any(String), paletteIndex: expect.any(Number) });
+    expect(v.activeActorId).toBe("roaster");
+    expect(v.topicsByActor.roaster).toEqual([{ factId: "fact_capacity", label: expect.any(String), asked: false }]);
+    expect(v.topicsByActor.buyer).toEqual([{ factId: "fact_contract", label: expect.any(String), asked: false }]);
+  });
+
+  it("startMeeting throws for an unknown actor id", () => {
+    const s = newSession();
+    expect(() => s.startMeeting(["roaster", "ghost"])).toThrow();
+  });
+
+  it("startMeeting throws with no participants", () => {
+    const s = newSession();
+    expect(() => s.startMeeting([])).toThrow();
+  });
+
+  it("startMeeting throws outside roaming (e.g. mid encounter)", () => {
+    const s = newSession();
+    s.maybeStartChain();
+    expect(s.mode()).toBe("encounter");
+    expect(() => s.startMeeting(["roaster", "buyer"])).toThrow();
+  });
+
+  it("meetingAsk grants the fact on ask and marks the topic asked", () => {
+    const s = newSession();
+    s.startMeeting(["roaster", "buyer"]);
+    const { line } = s.meetingAsk("roaster", "fact_capacity");
+    expect(line).toContain("500");
+    expect(s.isFactGathered("fact_capacity")).toBe(true);
+    expect(s.meetingState()?.topicsByActor.roaster[0].asked).toBe(true);
+  });
+
+  it("meetingAsk throws asking a closed (already-asked) topic", () => {
+    const s = newSession();
+    s.startMeeting(["roaster", "buyer"]);
+    s.meetingAsk("roaster", "fact_capacity");
+    expect(() => s.meetingAsk("roaster", "fact_capacity")).toThrow();
+  });
+
+  it("meetingAsk throws asking a topic that isn't the given actor's", () => {
+    const s = newSession();
+    s.startMeeting(["roaster", "buyer"]);
+    expect(() => s.meetingAsk("roaster", "fact_contract")).toThrow();
+  });
+
+  it("meetingAsk throws for a non-participant actor", () => {
+    const s = newSession();
+    s.startMeeting(["roaster"]);
+    expect(() => s.meetingAsk("buyer", "fact_contract")).toThrow();
+  });
+
+  it("meetingSetActive switches the active speaker; throws for a non-participant", () => {
+    const s = newSession();
+    s.startMeeting(["roaster", "buyer"]);
+    s.meetingSetActive("buyer");
+    expect(s.meetingState()?.activeActorId).toBe("buyer");
+    expect(() => s.meetingSetActive("bookkeeper")).toThrow();
+  });
+
+  it("meetingWrapUp returns to roaming and clears meeting state", () => {
+    const s = newSession();
+    s.startMeeting(["roaster", "buyer"]);
+    s.meetingAsk("roaster", "fact_capacity");
+    s.meetingWrapUp();
+    expect(s.mode()).toBe("roaming");
+    expect(s.meetingState()).toBeNull();
+    expect(s.isFactGathered("fact_capacity")).toBe(true); // survives wrap-up
+  });
+
+  it("meetingAsk/meetingSetActive/meetingWrapUp throw when no meeting is in progress", () => {
+    const s = newSession();
+    expect(() => s.meetingAsk("roaster", "fact_capacity")).toThrow();
+    expect(() => s.meetingSetActive("roaster")).toThrow();
+    expect(() => s.meetingWrapUp()).toThrow();
+  });
+
+  it("decision prompt does not fire during a meeting but does fire after wrap-up once unlocked", () => {
+    const s = newSession();
+    s.startMeeting(["roaster", "buyer"]);
+    s.meetingAsk("roaster", "fact_capacity");
+    s.meetingAsk("buyer", "fact_contract");
+    // 2/3 facts gathered; decision would still be locked, but assert the prompt
+    // never fires mid-meeting regardless.
+    expect(s.pollDecisionPrompt()).toBe(false);
+    s.meetingWrapUp();
+    expect(s.pollDecisionPrompt()).toBe(false); // still 2/3, locked
+    s.moveTo("back_office");
+    s.gatherFactsFromActor("bookkeeper"); // fact_cash: 3/3 now
+    expect(s.pollDecisionPrompt()).toBe(true);
+    expect(s.pollDecisionPrompt()).toBe(false); // once only
+  });
+});
+
 describe("GameSession — multi-node decision path", () => {
   // Hand-built minimal two-node world (not the toy world.json) to exercise the
   // endedAt:"node" branch of chooseOption: node A's only decision leads to
