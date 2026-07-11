@@ -41,14 +41,32 @@ export type MeetingChatCallback = (msg: MeetingChatMessage) => AsyncIterable<Mee
  * generator that keeps yielding past `done` shouldn't hang the UI on an
  * iterator that never returns). Returns the final text plus whether the host
  * flagged `sceneCompleted` on any chunk.
+ *
+ * `isCancelled` (final review, C4): an optional cancellation check, polled
+ * before every chunk is processed — when it returns true, the loop `break`s
+ * immediately (before `onProgress` runs for that chunk), which triggers the
+ * language's own IteratorClose semantics on `stream` (a `for await...of` that
+ * exits early — via `break`, `return`, or a thrown error — automatically
+ * calls the iterator's `.return()`). `naibleAdapter.ts`'s SSE/queue plumbing
+ * is already built around exactly this propagating all the way down to
+ * releasing the underlying `ReadableStream` reader (see its `withIsLast`
+ * doc comment), so a caller (`MeetingEncounter`) that breaks here on unmount
+ * gets that cleanup for free — no separate `AbortController` plumbing
+ * needed through the `MeetingChatCallback` contract. One known limitation:
+ * if the stream is stalled awaiting its NEXT chunk (e.g. a stuck network
+ * read) rather than actively yielding, this check can't run until that next
+ * chunk arrives (or the stream itself errors/completes) — genuinely
+ * unbounded stalls aren't aborted here.
  */
 export async function consumeMeetingChatStream(
   stream: AsyncIterable<MeetingChatChunk>,
   onProgress: (partialText: string, chunk: MeetingChatChunk) => void,
+  isCancelled?: () => boolean,
 ): Promise<{ text: string; sceneCompleted: boolean }> {
   let text = "";
   let sceneCompleted = false;
   for await (const chunk of stream) {
+    if (isCancelled?.()) break;
     if (chunk.token) text += chunk.token;
     if (chunk.sceneCompleted) sceneCompleted = true;
     onProgress(text, chunk);

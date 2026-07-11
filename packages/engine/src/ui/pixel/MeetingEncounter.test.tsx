@@ -317,6 +317,246 @@ describe("MeetingEncounter", () => {
     expect(typewriter!.textContent).toContain("the line goes quiet");
   });
 
+  // Final review (C6 — locked spec decision #2, hybrid conversation): ASK must also
+  // reach the persona LLM when a host chat callback is wired — the fact grant stays
+  // deterministic (meetingAsk, unconditionally), but the *displayed* reply routes
+  // through the same thinking -> streaming -> revealing path as SAY instead of the
+  // synchronous canned line.
+  it("ASK routes the suggested question through an injected onSay callback (fact still granted deterministically; thinking -> streaming -> revealing)", async () => {
+    const session = newSession();
+    const view = session.startMeeting(["roaster", "buyer"]);
+    async function* fakeStream() {
+      yield { actorId: "roaster", token: "Sure" };
+      yield { actorId: "roaster", token: ", 500 kilos a week.", done: true };
+    }
+    const onSay = vi.fn().mockReturnValue(fakeStream());
+
+    act(() => {
+      root.render(
+        <MeetingEncounter
+          view={view}
+          playerName="Maya"
+          facts={facts}
+          agentSpriteUrl={(i) => `sprite-${i}.png`}
+          playerBackUrl="player.png"
+          onAsk={(actorId, factId) => session.meetingAsk(actorId, factId)}
+          onSay={onSay}
+          onWrapUp={vi.fn()}
+        />,
+      );
+    });
+
+    act(() => clickByText(container, "meeting-action-menu", "ASK"));
+    expect(session.isFactGathered("fact_capacity")).toBe(false);
+    await act(async () => {
+      clickByText(container, "meeting-ask-panel", "Roasting capacity");
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // The deterministic grant happens regardless of the display path.
+    expect(session.isFactGathered("fact_capacity")).toBe(true);
+    expect(onSay).toHaveBeenCalledWith({ target: { actorId: "roaster" }, text: expect.stringContaining("Roasting capacity") });
+    const typewriter = container.querySelector<HTMLElement>('[data-testid="typewriter"]');
+    expect(typewriter).not.toBeNull();
+    act(() => typewriter!.click());
+    expect(typewriter!.textContent).toContain("500 kilos a week");
+  });
+
+  it("ASK falls back to the real canned dialogue line (not the generic SAY_QUIET_LINE) when the onSay stream throws mid-iteration", async () => {
+    const session = newSession();
+    const view = session.startMeeting(["roaster", "buyer"]);
+    async function* brokenStream(): AsyncGenerator<{ actorId: string; token?: string; done?: boolean }> {
+      yield { actorId: "roaster", token: "Well" };
+      throw new Error("SSE connection dropped");
+    }
+    const onSay = vi.fn().mockReturnValue(brokenStream());
+
+    act(() => {
+      root.render(
+        <MeetingEncounter
+          view={view}
+          playerName="Maya"
+          facts={facts}
+          agentSpriteUrl={(i) => `sprite-${i}.png`}
+          playerBackUrl="player.png"
+          onAsk={(actorId, factId) => session.meetingAsk(actorId, factId)}
+          onSay={onSay}
+          onWrapUp={vi.fn()}
+        />,
+      );
+    });
+
+    act(() => clickByText(container, "meeting-action-menu", "ASK"));
+    await act(async () => {
+      clickByText(container, "meeting-ask-panel", "Roasting capacity");
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(session.isFactGathered("fact_capacity")).toBe(true); // grant survives the display failure
+    const typewriter = container.querySelector<HTMLElement>('[data-testid="typewriter"]');
+    expect(typewriter).not.toBeNull();
+    act(() => typewriter!.click());
+    // The REAL dialogue line (from the toy world's fixture), not the generic filler.
+    expect(typewriter!.textContent?.replace(/\s+/g, " ")).toContain("Flat out, we can roast about 500 kilos a week");
+    expect(typewriter!.textContent).not.toContain("the line goes quiet");
+  });
+
+  it("ASK with no host callback stays the synchronous canned-line path (unaffected)", () => {
+    const session = newSession();
+    const view = session.startMeeting(["roaster", "buyer"]);
+    act(() => {
+      root.render(
+        <MeetingEncounter
+          view={view}
+          playerName="Maya"
+          facts={facts}
+          agentSpriteUrl={(i) => `sprite-${i}.png`}
+          playerBackUrl="player.png"
+          onAsk={(actorId, factId) => session.meetingAsk(actorId, factId)}
+          onWrapUp={vi.fn()}
+        />,
+      );
+    });
+
+    act(() => clickByText(container, "meeting-action-menu", "ASK"));
+    act(() => clickByText(container, "meeting-ask-panel", "Roasting capacity"));
+
+    expect(container.querySelector('[data-testid="meeting-thinking"]')).toBeNull();
+    expect(container.querySelector('[data-testid="meeting-stream"]')).toBeNull();
+    const typewriter = container.querySelector<HTMLElement>('[data-testid="typewriter"]');
+    expect(typewriter).not.toBeNull();
+    act(() => typewriter!.click()); // fully type the current page instantly
+    expect(typewriter!.textContent?.replace(/\s+/g, " ")).toContain("Flat out, we can roast about 500 kilos a week");
+  });
+
+  // Final review (C4): SAY's stream consumption had no unmount guard — a host stream
+  // that resolves/rejects AFTER the component unmounts must neither touch state nor
+  // leave the underlying iterator unclosed.
+  describe("unmount mid-SAY-stream (C4)", () => {
+    /** A fully manual AsyncIterable so the test controls exactly when `next()`
+     * resolves and can spy on `return()` (IteratorClose) being called. */
+    function controllableStream() {
+      let deliver: ((result: IteratorResult<{ actorId: string; token?: string; done?: boolean }>) => void) | null = null;
+      const returnSpy = vi.fn(async () => ({ value: undefined, done: true as const }));
+      const stream = {
+        [Symbol.asyncIterator]() {
+          return {
+            next: () => new Promise<IteratorResult<{ actorId: string; token?: string; done?: boolean }>>((resolve) => { deliver = resolve; }),
+            return: returnSpy,
+          };
+        },
+      };
+      return {
+        stream,
+        pushToken: (token: string) => { deliver?.({ value: { actorId: "roaster", token }, done: false }); deliver = null; },
+        returnSpy,
+      };
+    }
+
+    it("unmounting mid-stream closes the underlying iterator (IteratorClose) instead of leaking it", async () => {
+      const session = newSession();
+      const view = session.startMeeting(["roaster", "buyer"]);
+      const { stream, pushToken, returnSpy } = controllableStream();
+      const onSay = vi.fn().mockReturnValue(stream);
+
+      act(() => {
+        root.render(
+          <MeetingEncounter
+            view={view}
+            playerName="Maya"
+            facts={facts}
+            agentSpriteUrl={(i) => `sprite-${i}.png`}
+            playerBackUrl="player.png"
+            onAsk={(actorId, factId) => session.meetingAsk(actorId, factId)}
+            onSay={onSay}
+            onWrapUp={vi.fn()}
+          />,
+        );
+      });
+
+      act(() => clickByText(container, "meeting-action-menu", "SAY"));
+      act(() => clickByText(container, "choice-box", "@Sam"));
+      const textarea = container.querySelector<HTMLTextAreaElement>('[data-testid="meeting-say-textarea"]')!;
+      act(() => {
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")!.set!;
+        setter.call(textarea, "Tell me more");
+        textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      act(() => { container.querySelector<HTMLElement>('[data-testid="meeting-say-submit"]')!.click(); });
+      expect(container.querySelector('[data-testid="meeting-thinking"]')).not.toBeNull(); // stream hasn't yielded yet
+
+      act(() => root.unmount());
+      expect(returnSpy).not.toHaveBeenCalled(); // not yet — the stream never got a chance to notice
+
+      // A token arrives AFTER unmount: consumeMeetingChatStream's next loop iteration
+      // must see the cancellation and close the iterator, not keep consuming it.
+      await act(async () => {
+        pushToken("too late");
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(returnSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("a stream that resolves after unmount does not update state or throw (no post-unmount setState)", async () => {
+      const session = newSession();
+      const view = session.startMeeting(["roaster", "buyer"]);
+      let resolveChunk: ((v: { actorId: string; token?: string; done?: boolean }) => void) | null = null;
+      async function* gen(): AsyncGenerator<{ actorId: string; token?: string; done?: boolean }> {
+        yield await new Promise((resolve) => { resolveChunk = resolve; });
+      }
+      const onSay = vi.fn().mockReturnValue(gen());
+      const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      try {
+        act(() => {
+          root.render(
+            <MeetingEncounter
+              view={view}
+              playerName="Maya"
+              facts={facts}
+              agentSpriteUrl={(i) => `sprite-${i}.png`}
+              playerBackUrl="player.png"
+              onAsk={(actorId, factId) => session.meetingAsk(actorId, factId)}
+              onSay={onSay}
+              onWrapUp={vi.fn()}
+            />,
+          );
+        });
+
+        act(() => clickByText(container, "meeting-action-menu", "SAY"));
+        act(() => clickByText(container, "choice-box", "@Sam"));
+        const textarea = container.querySelector<HTMLTextAreaElement>('[data-testid="meeting-say-textarea"]')!;
+        act(() => {
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")!.set!;
+          setter.call(textarea, "Tell me more");
+          textarea.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+        act(() => { container.querySelector<HTMLElement>('[data-testid="meeting-say-submit"]')!.click(); });
+
+        act(() => root.unmount());
+        await act(async () => {
+          resolveChunk?.({ actorId: "roaster", token: "too late", done: true });
+          await Promise.resolve();
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+
+        // No "Can't perform a React state update on an unmounted component" warning —
+        // the mounted-ref guard must short-circuit the state setters before React ever
+        // sees the call.
+        expect(consoleErrorSpy).not.toHaveBeenCalled();
+      } finally {
+        consoleErrorSpy.mockRestore();
+      }
+    });
+  });
+
   it("WRAP UP survives a rejecting onSceneWrapUp (fire-and-forget, no unhandled rejection)", async () => {
     const session = newSession();
     const view = session.startMeeting(["roaster", "buyer"]);

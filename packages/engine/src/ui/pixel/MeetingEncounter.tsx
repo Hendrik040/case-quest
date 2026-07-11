@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { MeetingView } from "../../state/session";
 import { MessageBox } from "./MessageBox";
 import { Typewriter } from "./Typewriter";
@@ -207,6 +207,21 @@ export function MeetingEncounter({
   const [streamText, setStreamText] = useState("");
   const [sayTarget, setSayTarget] = useState<MeetingSayTarget | null>(null);
 
+  // Final review (C4): mounted-ref unmount guard. A host chat stream (SAY or, since
+  // C6, ASK too) can resolve/reject/keep-yielding after the host page tears this
+  // component down mid-conversation (mountCaseQuest's `unmount()` is a bare
+  // `root.unmount()` with no coordination with in-flight streams) — every setState
+  // below checks this ref first, and `runHostReply`'s `consumeMeetingChatStream` call
+  // passes `() => !mountedRef.current` as its cancellation check, which makes an
+  // in-progress `for await` loop `break` (closing the underlying iterator via the
+  // language's own IteratorClose — see meetingSay.ts's doc comment) instead of
+  // continuing to drain a stream nobody can see anymore.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
   const askDisabled = meetingAskDisabled(view);
 
   const handleMenuPick = (action: "ask" | "say" | "notes" | "wrapUp") => {
@@ -216,11 +231,64 @@ export function MeetingEncounter({
     else setPhase("wrapConfirm");
   };
 
+  /**
+   * Shared thinking -> streaming -> revealing delivery for both SAY (free text) and,
+   * since C6, ASK (the suggested question) whenever a host chat callback (`onSay`) is
+   * wired: `fallbackLine` is what lands in `revealing` if the stream throws mid-
+   * iteration, `onSay` throws synchronously, or the stream ends without a single
+   * token — SAY's fallback is the generic `SAY_QUIET_LINE` filler (there's no better
+   * line to fall back to for free text), while ASK's fallback is the REAL
+   * deterministic dialogue line `onAsk` already computed (a strictly better filler
+   * than generic "the line goes quiet" text, since it's an actual correct answer).
+   * Guarded throughout by `mountedRef` (C4) so a host-initiated teardown mid-stream
+   * can't set state on a torn-down tree.
+   */
+  const runHostReply = (target: MeetingSayTarget, text: string, fallbackLine: string) => {
+    setStreamText("");
+    setPhase("thinking");
+    let firstToken = true;
+    // Every failure mode funnels into the shared "revealing" phase with a fallback
+    // line — a host stream that throws mid-iteration, an `onSay` that throws
+    // synchronously, or a stream that ends without a single token must never strand
+    // the player in thinking/streaming, which render no menu and no cancel affordance.
+    try {
+      consumeMeetingChatStream(
+        onSay!({ target, text }),
+        (partial) => {
+          if (!mountedRef.current) return;
+          if (firstToken) { firstToken = false; setPhase("streaming"); }
+          setStreamText(partial);
+        },
+        () => !mountedRef.current,
+      ).then(
+        ({ text: finalText }) => {
+          if (!mountedRef.current) return;
+          setRevealLine(finalText.trim().length > 0 ? finalText : fallbackLine);
+        },
+        () => { if (mountedRef.current) setRevealLine(fallbackLine); },
+      ).then(() => { if (mountedRef.current) setPhase("revealing"); });
+    } catch {
+      if (mountedRef.current) {
+        setRevealLine(fallbackLine);
+        setPhase("revealing");
+      }
+    }
+  };
+
   const handleAskPick = (actorId: string, factId: string) => {
-    const { line } = onAsk(actorId, factId);
+    const { line } = onAsk(actorId, factId); // deterministic grant — always happens, regardless of delivery path
     onSetActive?.(actorId);
-    setRevealLine(line);
-    setPhase("revealing");
+    if (onSay) {
+      // C6 (locked spec decision #2 — hybrid conversation): the fact is already
+      // granted above; route the *displayed* reply through the same persona-LLM
+      // delivery path as SAY instead of showing `line` synchronously.
+      const topic = view.topicsByActor[actorId]?.find((t) => t.factId === factId);
+      const askText = topic ? `Ask about: ${topic.label}` : "Ask about this.";
+      runHostReply({ actorId }, askText, line);
+    } else {
+      setRevealLine(line);
+      setPhase("revealing");
+    }
   };
 
   const sayTargetOptions = [
@@ -237,26 +305,7 @@ export function MeetingEncounter({
   const handleSaySubmit = (text: string) => {
     const target = sayTarget!;
     if (onSay) {
-      setStreamText("");
-      setPhase("thinking");
-      let firstToken = true;
-      // Every failure mode funnels into the shared "revealing" phase with a
-      // diegetic fallback line — a host stream that throws mid-iteration, an
-      // `onSay` that throws synchronously, or a stream that ends without a
-      // single token must never strand the player in thinking/streaming,
-      // which render no menu and no cancel affordance.
-      try {
-        consumeMeetingChatStream(onSay({ target, text }), (partial) => {
-          if (firstToken) { firstToken = false; setPhase("streaming"); }
-          setStreamText(partial);
-        }).then(
-          ({ text: finalText }) => setRevealLine(finalText.trim().length > 0 ? finalText : SAY_QUIET_LINE),
-          () => setRevealLine(SAY_QUIET_LINE),
-        ).then(() => setPhase("revealing"));
-      } catch {
-        setRevealLine(SAY_QUIET_LINE);
-        setPhase("revealing");
-      }
+      runHostReply(target, text, SAY_QUIET_LINE);
     } else {
       const targetName = target === "all" ? "Everyone" : view.participants.find((p) => p.actorId === target.actorId)?.name ?? "They";
       setRevealLine(cannedSayLine(targetName));

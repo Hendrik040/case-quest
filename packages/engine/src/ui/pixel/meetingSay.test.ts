@@ -42,6 +42,52 @@ describe("consumeMeetingChatStream", () => {
     const result = await consumeMeetingChatStream(gen([{ actorId: "roaster", done: true }]), () => {});
     expect(result).toEqual({ text: "", sceneCompleted: false });
   });
+
+  // Final review (C4): unmount-mid-stream cancellation seam.
+  describe("isCancelled cancellation (C4)", () => {
+    it("stops consuming (and stops reporting progress) once isCancelled returns true", async () => {
+      const progress: string[] = [];
+      let cancelled = false;
+      const result = await consumeMeetingChatStream(
+        gen([
+          { actorId: "roaster", token: "Well" },
+          { actorId: "roaster", token: ", sure." },
+          { actorId: "roaster", token: " more!", done: true },
+        ]),
+        (partial) => {
+          progress.push(partial);
+          if (partial === "Well") cancelled = true; // cancel right after the first chunk
+        },
+        () => cancelled,
+      );
+      expect(progress).toEqual(["Well"]); // the second chunk was never reported
+      expect(result.text).toBe("Well"); // stopped before accumulating further tokens
+    });
+
+    it("calling .return() on the underlying iterator (IteratorClose) happens when a cancelled loop breaks early", async () => {
+      const returnSpy = { called: false };
+      const stream: AsyncIterable<MeetingChatChunk> = {
+        [Symbol.asyncIterator]() {
+          let i = 0;
+          const chunks: MeetingChatChunk[] = [{ actorId: "roaster", token: "a" }, { actorId: "roaster", token: "b" }];
+          return {
+            next: async () => (i < chunks.length ? { value: chunks[i++], done: false } : { value: undefined, done: true }),
+            return: async () => { returnSpy.called = true; return { value: undefined, done: true as const }; },
+          };
+        },
+      };
+      await consumeMeetingChatStream(stream, () => {}, () => true); // cancelled from the very first chunk
+      expect(returnSpy.called).toBe(true);
+    });
+
+    it("without isCancelled, behaves exactly as before (no cancellation checks)", async () => {
+      const result = await consumeMeetingChatStream(
+        gen([{ actorId: "roaster", token: "hi", done: true }]),
+        () => {},
+      );
+      expect(result.text).toBe("hi");
+    });
+  });
 });
 
 describe("cannedSayLine", () => {
