@@ -66,6 +66,14 @@ const FLOOR_PALETTE = ["#98c070", "#a8d078", "#78a050"];
 const WALL_PALETTE = ["#9a8fa8", "#867a90", "#3a3448"];
 const DOOR_PALETTE = ["#8a6d3b", "#a9835a", "#2a1c10", "#241408"];
 const DESK_PALETTE = ["#6d4c41", "#8a6a58", "#4a3328", "#1a1414"];
+// Deep mahogany, distinct from the DESK brown: a long conference-table segment
+// reads as "the table" (not "another desk") via a darker base + a lengthwise
+// lighter runner (the tablecloth/veneer strip) rather than the desk's flat
+// top-highlight band.
+const TABLE_PALETTE = ["#4a2a20", "#6b3f30", "#2e1810", "#120a08"];
+// Warm ochre glow, distinct from the FLOOR green: a walk-up trigger zone tile
+// (subtle floor tint + a glowing border) rather than a prop silhouette.
+const TRIGGER_PALETTE = ["#e0b050", "#f0cc78", "#b8862e"];
 
 function floorShape(): Canvas {
   const c = blank(16, 16);
@@ -110,11 +118,33 @@ function deskShape(): Canvas {
   return c;
 }
 
+function tableShape(): Canvas {
+  const c = blank(16, 16);
+  rect(c, 0, 0, 15, 15, "0"); // mahogany base
+  rect(c, 0, 5, 15, 10, "1"); // lengthwise veneer runner (reads as "table", not "desk")
+  rect(c, 0, 13, 15, 15, "2"); // shadowed bottom edge
+  outlineRect(c, 0, 0, 15, 15, "3"); // near-black prop outline
+  return c;
+}
+
+function triggerShape(): Canvas {
+  const c = blank(16, 16);
+  rect(c, 0, 0, 15, 15, "0"); // ochre floor tint
+  const lightSpeckle: Array<[number, number]> = [
+    [3, 2], [10, 3], [5, 8], [12, 9], [2, 12], [8, 13],
+  ];
+  for (const [x, y] of lightSpeckle) px(c, x, y, "1");
+  outlineRect(c, 0, 0, 15, 15, "2"); // glowing border, distinguishing it from plain floor
+  return c;
+}
+
 const TILE_SHAPES = {
   floor: floorShape,
   wall: wallShape,
   door: doorShape,
   desk: deskShape,
+  table: tableShape,
+  trigger: triggerShape,
 } satisfies Record<string, () => Canvas>;
 
 const TILE_PALETTES: Record<keyof typeof TILE_SHAPES, string[]> = {
@@ -122,9 +152,11 @@ const TILE_PALETTES: Record<keyof typeof TILE_SHAPES, string[]> = {
   wall: WALL_PALETTE,
   door: DOOR_PALETTE,
   desk: DESK_PALETTE,
+  table: TABLE_PALETTE,
+  trigger: TRIGGER_PALETTE,
 };
 
-export function tileGrid(kind: "floor" | "wall" | "door" | "desk"): PixelGrid {
+export function tileGrid(kind: "floor" | "wall" | "door" | "desk" | "table" | "trigger"): PixelGrid {
   return { w: 16, h: 16, palette: TILE_PALETTES[kind], rows: toRows(TILE_SHAPES[kind]()) };
 }
 

@@ -15,6 +15,8 @@ export function generatePlaceholderTextures(scene: Phaser.Scene): void {
   addOnce(scene, "tile-wall", gridToCanvas(tileGrid("wall")));
   addOnce(scene, "tile-door", gridToCanvas(tileGrid("door")));
   addOnce(scene, "tile-desk", gridToCanvas(tileGrid("desk")));
+  addOnce(scene, "tile-table", gridToCanvas(tileGrid("table")));
+  addOnce(scene, "tile-trigger", gridToCanvas(tileGrid("trigger")));
   addOnce(scene, "sprite-fact", gridToCanvas(factGrid()));
   addOnce(scene, "sprite-player", gridToCanvas(charGrid("player", 0)));
   NPC_PALETTES.forEach((_, i) => addOnce(scene, `sprite-npc-${i}`, gridToCanvas(charGrid("npc", i))));

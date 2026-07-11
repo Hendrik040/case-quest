@@ -1,9 +1,10 @@
 import Phaser from "phaser";
 import type { GameSession } from "../state/session";
 import type { EventBus } from "../bridge/events";
-import { resolvePlacement } from "../state/placement";
+import { resolvePlacement, resolveSeating } from "../state/placement";
 import { getTemplate, TILE, TILE_SIZE, type RoomTemplate } from "./templates";
 import { generatePlaceholderTextures } from "./textures";
+import { isTriggerZoneTile, enteredTriggerZone, isFacingTable, meetingStartPayload } from "./meetingTrigger";
 
 const MOVE_DURATION_MS = 220;
 
@@ -46,6 +47,14 @@ export class WorldScene extends Phaser.Scene {
   private facing: Direction = "down";
   private moving = false;
   private frozen = false;
+
+  // Meeting-trigger state (Task 1.6): the node's seated actors at the current
+  // (venue) location, and whether the player's logical tile is currently
+  // inside the template's triggerZone — tracked so we fire on the
+  // enter-the-zone edge only (see meetingTrigger.ts), not every frame spent
+  // standing in it.
+  private seatedActorIds: string[] = [];
+  private inTriggerZone = false;
 
   // Latches a Space press/release that lands entirely within a single
   // update() call while frozen/moving was blocking input, so a step-time
@@ -146,7 +155,11 @@ export class WorldScene extends Phaser.Scene {
     // edge, in either room.
     this.cameras.main.setBounds(0, 0, tpl.width * TILE_SIZE, tpl.height * TILE_SIZE);
     const tileKey = (t: number) =>
-      t === TILE.WALL ? "tile-wall" : t === TILE.DOOR ? "tile-door" : t === TILE.DESK ? "tile-desk" : "tile-floor";
+      t === TILE.WALL ? "tile-wall" :
+      t === TILE.DOOR ? "tile-door" :
+      t === TILE.DESK ? "tile-desk" :
+      t === TILE.TABLE ? "tile-table" :
+      "tile-floor";
 
     for (let y = 0; y < tpl.height; y++) {
       for (let x = 0; x < tpl.width; x++) {
@@ -155,9 +168,18 @@ export class WorldScene extends Phaser.Scene {
       }
     }
 
+    // Trigger zone: rendered as a subtle tint over the floor tiles it sits on
+    // (drawn after the base tile pass, so it layers on top), marking the
+    // walk-up-to-the-table meeting encounter zone.
+    for (const tz of tpl.triggerZone) {
+      const { x: cx, y: cy } = tileCenter(tz.x, tz.y);
+      this.rendered.push(this.add.image(cx, cy, "tile-trigger"));
+    }
+
     const node = this.session.currentNode();
     const world = this.session.world();
     const placement = resolvePlacement(world, node, loc.id);
+    this.seatedActorIds = resolveSeating(world, node, loc.id).seatedActorIds;
 
     placement.npcIds.forEach((actorId, i) => {
       const slot = tpl.poiSlots[i % tpl.poiSlots.length];
@@ -189,6 +211,10 @@ export class WorldScene extends Phaser.Scene {
     this.tx = spawn.x;
     this.ty = spawn.y;
     this.moving = false;
+    // A fresh room-render always starts outside the zone from the trigger's
+    // point of view: spawn tiles are never authored inside a triggerZone
+    // (see templates.test.ts), and this resets the latch on scene:render.
+    this.inTriggerZone = isTriggerZoneTile(tpl, spawn.x, spawn.y);
     const { x: sx, y: sy } = characterFoot(spawn.x, spawn.y);
     if (!this.player) {
       this.player = this.add.sprite(sx, sy, "sprite-player").setOrigin(0.5, 0.75);
@@ -212,7 +238,7 @@ export class WorldScene extends Phaser.Scene {
     if (!this.tpl) return true;
     if (tx < 0 || ty < 0 || tx >= this.tpl.width || ty >= this.tpl.height) return true;
     const tile = this.tpl.tiles[ty][tx];
-    if (tile === TILE.WALL || tile === TILE.DESK) return true;
+    if (tile === TILE.WALL || tile === TILE.DESK || tile === TILE.TABLE) return true;
     return this.interactables.some((it) => it.kind === "actor" && it.tx === tx && it.ty === ty);
   }
 
@@ -220,27 +246,42 @@ export class WorldScene extends Phaser.Scene {
     this.moving = true;
     this.tx = tx;
     this.ty = ty;
+    const wasInZone = this.inTriggerZone;
+    this.inTriggerZone = !!this.tpl && isTriggerZoneTile(this.tpl, tx, ty);
     const { x, y } = characterFoot(tx, ty);
     this.tweens.add({
       targets: this.player,
       x, y,
       duration: MOVE_DURATION_MS,
-      onComplete: () => { this.moving = false; },
+      onComplete: () => {
+        this.moving = false;
+        // Re-check `frozen` at completion time, not just at step-start: an
+        // overlay can freeze the world mid-tween, and world:freeze discipline
+        // means no fresh encounter should open once the world is frozen.
+        if (!this.frozen && enteredTriggerZone(wasInZone, this.inTriggerZone)) this.fireMeetingStart();
+      },
     });
+  }
+
+  private fireMeetingStart(): void {
+    this.bus.emit("encounter:meeting:start", meetingStartPayload(this.seatedActorIds));
   }
 
   private interact(): void {
     const { dx, dy } = DIRECTION_DELTA[this.facing];
     const ftx = this.tx + dx, fty = this.ty + dy;
     const target = this.interactables.find((it) => it.tx === ftx && it.ty === fty);
-    if (!target) return;
-    if (target.kind === "actor") this.bus.emit("interact:actor", { actorId: target.id });
-    else if (target.kind === "fact") this.bus.emit("interact:fact", { factId: target.id });
-    else if (target.kind === "door") {
-      this.session.moveTo(target.id);
-      this.bus.emit("scene:render", {});
-      this.bus.emit("location:changed", { locationId: target.id });
+    if (target) {
+      if (target.kind === "actor") this.bus.emit("interact:actor", { actorId: target.id });
+      else if (target.kind === "fact") this.bus.emit("interact:fact", { factId: target.id });
+      else if (target.kind === "door") {
+        this.session.moveTo(target.id);
+        this.bus.emit("scene:render", {});
+        this.bus.emit("location:changed", { locationId: target.id });
+      }
+      return;
     }
+    if (this.tpl && isFacingTable(this.tpl, ftx, fty)) this.fireMeetingStart();
   }
 
   update() {
