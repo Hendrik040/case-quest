@@ -1,7 +1,25 @@
 import { describe, it, expect } from "vitest";
 import { WorldSchema, buildNodeGraph, type World } from "@case-quest/schema";
 import worldJson from "../../public/worlds/case3-m5.world.json";
-import { GameSession } from "./session";
+import { GameSession, type MeetingView } from "./session";
+import { resolveSeating } from "./placement";
+
+// B1 fix (M5 Task 5.2 review): maybeStartChain now returns null at a node's venue whenever
+// it has >=1 seated actor — the walk-up multi-party meeting (startMeeting) is THE intended
+// interaction there, not the legacy single-actor auto-chain. Drives every seated actor's
+// topics through the meeting machine instead, exactly as WorldScene's real triggerZone ->
+// `encounter:meeting:start` -> `session.startMeeting` wiring would.
+function driveMeetingAtVenue(s: GameSession, world: World): void {
+  expect(s.maybeStartChain()).toBeNull();
+  const { seatedActorIds } = resolveSeating(world, s.currentNode(), s.currentLocationId());
+  const view: MeetingView = s.startMeeting(seatedActorIds);
+  for (const participant of view.participants) {
+    for (const topic of view.topicsByActor[participant.actorId]) {
+      s.meetingAsk(participant.actorId, topic.factId);
+    }
+  }
+  s.meetingWrapUp();
+}
 
 // Regression coverage for the Task 5.1 review findings against the REAL, hand-authored
 // Case 3 world (not a toy fixture): the reviewer's smoke-test recommendation was "walk
@@ -78,18 +96,15 @@ describe("case3-m5 world — full walkthrough via real moveTo/door traversal (M5
 
     // --- Node 1: node-kaskazi-office ---
     expect(s.currentNode().id).toBe("node-kaskazi-office");
-    // Hussein is seated at the venue (boardroom); walk there and ask everything.
+    // Hussein is seated at the venue (boardroom); walk there and hold the meeting.
     s.moveTo("loc-kaskazi-boardroom");
-    let view = s.maybeStartChain();
-    expect(view?.actorId).toBe("actor-hussein");
-    for (const topic of view!.topics) s.encounterAsk(topic.factId);
-    while (s.encounterMoveOn().next) { /* drain */ }
+    driveMeetingAtVenue(s, world);
 
     // Koech (route NPC) sits on the route to Kawangware: walk the route.
     s.moveTo("loc-kaskazi-hq");
     s.moveTo("loc-nairobi-river-bridge");
     s.moveTo("loc-kawangware-entrance");
-    view = s.maybeStartChain();
+    const view = s.maybeStartChain(); // non-venue location: legacy chain unaffected by B1
     expect(view?.actorId).toBe("actor-koech");
     for (const topic of view!.topics) s.encounterAsk(topic.factId);
     while (s.encounterMoveOn().next) { /* drain */ }
@@ -105,17 +120,14 @@ describe("case3-m5 world — full walkthrough via real moveTo/door traversal (M5
     expect(s.currentNode().id).toBe("node-kawangware-market");
 
     // --- Node 2: node-kawangware-market ---
-    view = s.maybeStartChain(); // grouped venue seating: judy, mama-wanjiru, newspaper-vendor all at the market stalls
-    expect(view).not.toBeNull();
-    while (view) {
-      for (const topic of view.topics) s.encounterAsk(topic.factId);
-      view = s.encounterMoveOn().next;
-    }
+    // Grouped venue seating: judy + mama-wanjiru at the market stalls (newspaper-vendor is a
+    // route NPC, excluded — held separately on the back lane below).
+    driveMeetingAtVenue(s, world);
     // Newspaper vendor is a route NPC on the back lane.
     s.moveTo("loc-kawangware-backlane");
-    view = s.maybeStartChain();
-    expect(view?.actorId).toBe("actor-newspaper-vendor");
-    for (const topic of view!.topics) s.encounterAsk(topic.factId);
+    const backlaneView = s.maybeStartChain(); // non-venue location: legacy chain unaffected by B1
+    expect(backlaneView?.actorId).toBe("actor-newspaper-vendor");
+    for (const topic of backlaneView!.topics) s.encounterAsk(topic.factId);
     while (s.encounterMoveOn().next) { /* drain */ }
 
     expect(s.isDecisionUnlocked("dec-choose-clients")).toBe(true);
@@ -134,11 +146,8 @@ describe("case3-m5 world — full walkthrough via real moveTo/door traversal (M5
     expect(s.pollSceneActivation()).toEqual({ fromNodeId: "node-kawangware-market", toNodeId: "node-warehouse-negotiation" });
     expect(s.currentNode().id).toBe("node-warehouse-negotiation");
 
-    // --- Node 3: node-warehouse-negotiation ---
-    view = s.maybeStartChain();
-    expect(view?.actorId).toBe("actor-otieno");
-    for (const topic of view!.topics) s.encounterAsk(topic.factId);
-    while (s.encounterMoveOn().next) { /* drain */ }
+    // --- Node 3: node-warehouse-negotiation --- (Otieno, seated alone at the client_site venue)
+    driveMeetingAtVenue(s, world);
     // fact-dead-stock-risk is a location-only fact spot at the warehouse exterior.
     s.moveTo("loc-warehouse-exterior");
     s.gatherFactFromLocation("fact-dead-stock-risk");
@@ -159,13 +168,8 @@ describe("case3-m5 world — full walkthrough via real moveTo/door traversal (M5
     expect(s.pollSceneActivation()).toEqual({ fromNodeId: "node-warehouse-negotiation", toNodeId: "node-modern-office-decision" });
     expect(s.currentNode().id).toBe("node-modern-office-decision");
 
-    // --- Node 4: node-modern-office-decision ---
-    view = s.maybeStartChain();
-    expect(view).not.toBeNull(); // hussein + judy grouped at the modern boardroom
-    while (view) {
-      for (const topic of view.topics) s.encounterAsk(topic.factId);
-      view = s.encounterMoveOn().next;
-    }
+    // --- Node 4: node-modern-office-decision --- (hussein + judy grouped at the modern boardroom)
+    driveMeetingAtVenue(s, world);
 
     expect(s.isDecisionUnlocked("dec-finalize-business-model")).toBe(true);
     s.startDecision("dec-finalize-business-model");

@@ -195,6 +195,18 @@ export class GameSession {
     if (alreadyVisited) return null;
     const { npcIds } = resolvePlacement(this.worldRef, this.currentNode(), this.locationId);
     if (npcIds.length === 0) return null;
+    // B1 fix (M5 Task 5.2 review): a venue location with >=1 seated actor is a multi-party
+    // meeting scene — the walk-up triggerZone overlay (WorldScene, Task 1.6) is THE intended
+    // interaction there, not the legacy single-actor auto-chain. Without this, both
+    // mechanisms raced to open their overlay on the same room entry (whichever timer/step
+    // won), routing an unhurried player into the wrong (legacy) UI. `resolvePlacement`'s
+    // npcIds AT THE VENUE is already exactly `resolveSeating(...).seatedActorIds` (see its
+    // own ternary), so npcIds.length > 0 here plus "this is the venue" is exactly "the venue
+    // has >=1 seated actor" — no need to call resolveSeating again. A manual walk-up to one
+    // seated actor (startEncounterWith) and the meeting itself (startMeeting) both stay
+    // available; only the *automatic* chain is suppressed.
+    const venue = venueLocationId(this.worldRef, this.currentNode());
+    if (this.locationId === venue) return null;
     this.chain = npcIds;
     this.chainIdx = 0;
     this.internalMode = "encounter";

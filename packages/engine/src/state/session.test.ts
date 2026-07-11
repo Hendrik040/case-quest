@@ -559,9 +559,14 @@ describe("GameSession — spatial traversal (route locations + venue)", () => {
     expect(s.pollSceneActivation()).toEqual({ fromNodeId: "node_a", toNodeId: "node_b" });
     expect(s.pollSceneActivation()).toBeNull(); // one-shot, like pollDecisionPrompt
 
-    // node B re-arms normally after arrival
-    const view = s.maybeStartChain();
-    expect(view?.actorId).toBe("npc_b");
+    // node B re-arms normally after arrival, BUT node_b's sole location is its venue and
+    // npc_b is seated there (their fact is sourced at loc_b_venue itself) — B1 fix (Task 5.2
+    // review): the legacy auto-chain must not race the multi-party meeting trigger for a
+    // venue with a seated actor, so maybeStartChain now suppresses instead of starting a
+    // single-actor chain. The manual/meeting path (startMeeting) remains available.
+    expect(s.maybeStartChain()).toBeNull();
+    const meeting = s.startMeeting(["npc_b"]);
+    expect(meeting.participants.map((p) => p.actorId)).toEqual(["npc_b"]);
   });
 
   it("rejects moving to a location outside the extended walkable set mid-traversal", () => {
@@ -827,5 +832,142 @@ describe("GameSession — spatial traversal review fixes (M5 Task 5.1 review)", 
     expect(s.currentNode().id).toBe("node_b");
     expect(s.mode()).toBe("roaming");
     expect(s.pollSceneActivation()).toEqual({ fromNodeId: "node_a", toNodeId: "node_b" });
+  });
+});
+
+describe("GameSession — B1 fix: venue meeting suppresses the legacy auto-chain (M5 Task 5.2 review)", () => {
+  // The Task 5.2 e2e report's finding #1: entering a boardroom-typed venue used to race the
+  // legacy per-actor auto-chain (session.maybeStartChain, on App's 1200ms timer) against the
+  // new walk-up multi-party meeting trigger (WorldScene's triggerZone) — whichever fired first
+  // won, so a player who didn't rush the table got routed into the wrong (single-actor) UI.
+  // Fix: maybeStartChain returns null whenever the current location IS the current node's
+  // venue AND it has >=1 seated actor (resolveSeating) — the meeting is THE scene interaction
+  // there, so the chain must never even attempt to start. A manual walk-up to one seated actor
+  // (startEncounterWith) and the meeting path (startMeeting) both stay available regardless;
+  // only the *automatic* chain is suppressed.
+
+  // One node covering both of the first two scenarios: a non-venue office (npc_office, home
+  // there) and a venue with a seated, non-route actor (npc_seated, home there too) plus a
+  // route NPC (npc_route, home on the route) who's excluded from seating either way.
+  function venueChainWorld(): World {
+    return WorldSchema.parse({
+      schema_version: "0.2",
+      meta: {
+        case_id: "venue-chain-suppression-test", title: "Venue Chain Suppression Test",
+        synopsis: "A non-venue office and a venue with a seated actor, in one node.",
+        protagonist_actor_id: "player", start_node_id: "node_meeting",
+      },
+      learning_objectives: [],
+      actors: [
+        {
+          id: "player", name: "Player", role: "protagonist", is_playable: true,
+          persona: { background: "", personality: "", communication_style: "" }, goals: [], knowledge: [],
+        },
+        {
+          id: "npc_office", name: "Olu", role: "npc", is_playable: false,
+          persona: { background: "", personality: "", communication_style: "" }, goals: [], knowledge: ["fact_office"],
+          dialogue: { greeting: "Hi from the office", topics: [{ fact_id: "fact_office", line: "Office fact revealed." }] },
+        },
+        {
+          id: "npc_seated", name: "Sena", role: "npc", is_playable: false,
+          persona: { background: "", personality: "", communication_style: "" }, goals: [], knowledge: ["fact_venue"],
+          dialogue: { greeting: "Hi from the venue", topics: [{ fact_id: "fact_venue", line: "Venue fact revealed." }] },
+        },
+        {
+          id: "npc_route", name: "Ryo", role: "npc", is_playable: false,
+          persona: { background: "", personality: "", communication_style: "" }, goals: [], knowledge: ["fact_route"],
+          dialogue: { greeting: "Hi from the route", topics: [{ fact_id: "fact_route", line: "Route fact revealed." }] },
+        },
+      ],
+      locations: [
+        { id: "office_a", name: "Office A", type: "office", exits: ["venue_seated", "route_a"] },
+        { id: "venue_seated", name: "Seated Venue", type: "boardroom", exits: ["office_a"] },
+        { id: "route_a", name: "Route A", type: "street", exits: ["office_a"] },
+      ],
+      facts: [
+        { id: "fact_office", label: "Office Fact", content: "office content", sources: [{ actor_id: "npc_office", location_id: "office_a" }] },
+        { id: "fact_venue", label: "Venue Fact", content: "venue content", sources: [{ actor_id: "npc_seated", location_id: "venue_seated" }] },
+        { id: "fact_route", label: "Route Fact", content: "route content", sources: [{ actor_id: "npc_route", location_id: "route_a" }] },
+      ],
+      decisions: [],
+      nodes: [
+        {
+          id: "node_meeting", title: "The Meeting",
+          accessible_locations: ["office_a", "venue_seated"],
+          route_locations: ["route_a"],
+          present_actors: ["npc_office", "npc_seated", "npc_route"],
+          available_facts: ["fact_office", "fact_venue", "fact_route"],
+          live_decisions: [],
+        },
+      ],
+      endings: [],
+    });
+  }
+
+  // A separate node whose only venue-typed location seats no one at all (its one present
+  // actor is a route NPC) — covers the third scenario.
+  function emptyVenueWorld(): World {
+    return WorldSchema.parse({
+      schema_version: "0.2",
+      meta: {
+        case_id: "empty-venue-test", title: "Empty Venue Test",
+        synopsis: "A venue location with zero seated actors.",
+        protagonist_actor_id: "player", start_node_id: "node_a",
+      },
+      learning_objectives: [],
+      actors: [
+        {
+          id: "player", name: "Player", role: "protagonist", is_playable: true,
+          persona: { background: "", personality: "", communication_style: "" }, goals: [], knowledge: [],
+        },
+        {
+          id: "npc_route", name: "Ryo", role: "npc", is_playable: false,
+          persona: { background: "", personality: "", communication_style: "" }, goals: [], knowledge: ["fact_route"],
+          dialogue: { greeting: "Hi from the route", topics: [{ fact_id: "fact_route", line: "Route fact revealed." }] },
+        },
+      ],
+      locations: [
+        { id: "venue_empty", name: "Empty Venue", type: "boardroom", exits: ["route_only"] },
+        { id: "route_only", name: "Route Only", type: "street", exits: ["venue_empty"] },
+      ],
+      facts: [
+        { id: "fact_route", label: "Route Fact", content: "route content", sources: [{ actor_id: "npc_route", location_id: "route_only" }] },
+      ],
+      decisions: [],
+      nodes: [
+        {
+          id: "node_a", title: "Node A",
+          accessible_locations: ["venue_empty"],
+          route_locations: ["route_only"],
+          present_actors: ["npc_route"],
+          available_facts: ["fact_route"],
+          live_decisions: [],
+        },
+      ],
+      endings: [],
+    });
+  }
+
+  it("venue location with >=1 seated actor: maybeStartChain returns null (the fix)", () => {
+    const s = new GameSession(venueChainWorld());
+    s.moveTo("venue_seated");
+    expect(s.maybeStartChain()).toBeNull();
+    // The meeting/manual paths are unaffected — the room isn't dead, just not auto-chained.
+    expect(s.startMeeting(["npc_office", "npc_seated"]).participants.map((p) => p.actorId).sort())
+      .toEqual(["npc_office", "npc_seated"]);
+  });
+
+  it("non-venue location with a fact-source NPC: chain unchanged (still auto-starts)", () => {
+    const s = new GameSession(venueChainWorld());
+    // Session boots at office_a (accessible_locations[0]), a non-venue location.
+    const view = s.maybeStartChain();
+    expect(view?.actorId).toBe("npc_office");
+    expect(view?.topics).toEqual([{ factId: "fact_office", label: "Office Fact", asked: false }]);
+  });
+
+  it("venue location with zero seated actors: chain unchanged (still null, same as before the fix)", () => {
+    const s = new GameSession(emptyVenueWorld());
+    expect(s.currentLocationId()).toBe("venue_empty");
+    expect(s.maybeStartChain()).toBeNull();
   });
 });
