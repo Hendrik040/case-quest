@@ -109,6 +109,29 @@ describe("placement", () => {
       expect(resolvePlacement(world2, node2, "hq_boardroom").npcIds.sort()).toEqual(["alice", "bob", "carol"]);
       expect(resolveSeating(world2, node2, "lobby")).toEqual({ seatedActorIds: [] });
     });
+    it("resolvePlacement's doorTargets include a route location exit, not just accessible_locations exits (M5 review fix)", () => {
+      // Regression: resolvePlacement's doorTargets used to filter a location's exits
+      // against accessible_locations only, silently dropping any exit into a
+      // route_location. The venue's only exit here ("street_outside") is a route
+      // location, not an accessible_location — without the fix, doorTargets is empty
+      // and the player has no way to physically leave the venue at all.
+      const { world: vWorld, node: vNode } = buildVenueWorld();
+      const p = resolvePlacement(vWorld, vNode, "hq_boardroom");
+      expect(p.doorTargets).toEqual(["street_outside"]);
+    });
+    it("resolvePlacement's doorTargets at a route location door back into the venue too", () => {
+      const { world: vWorld, node: vNode } = buildVenueWorld();
+      const p = resolvePlacement(vWorld, vNode, "street_outside");
+      expect(p.doorTargets).toEqual(["hq_boardroom"]);
+    });
+    it("an explicit walkableIds override (e.g. the session's traversal-extended set) takes precedence over the accessible∪route default", () => {
+      const { world: vWorld, node: vNode } = buildVenueWorld();
+      // Even though "street_outside" is a route location (normally walkable), an
+      // explicit walkableIds set that excludes it must be honored — this is how
+      // WorldScene passes GameSession's actual (traversal-aware) walkable set.
+      const p = resolvePlacement(vWorld, vNode, "hq_boardroom", ["hq_boardroom"]);
+      expect(p.doorTargets).toEqual([]);
+    });
     it("falls back to per-actor scatter when a node with route_locations has no venue-typed location", () => {
       const { world: vWorld, node: vNode } = buildVenueWorld();
       // Replace the boardroom with an office: no venue-typed accessible location remains.

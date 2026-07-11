@@ -178,7 +178,12 @@ export class WorldScene extends Phaser.Scene {
 
     const node = this.session.currentNode();
     const world = this.session.world();
-    const placement = resolvePlacement(world, node, loc.id);
+    // Review fix (M5 Task 5.1 review): pass GameSession's own walkable set (which
+    // already accounts for route_locations and, mid-traversal, the next node's full
+    // accessible_locations) so rendered doors exactly match what `session.moveTo` will
+    // actually allow — see the doc comment on `resolvePlacement`'s `walkableIds` param.
+    const walkableIds = this.session.accessibleLocations().map((l) => l.id);
+    const placement = resolvePlacement(world, node, loc.id, walkableIds);
     this.seatedActorIds = resolveSeating(world, node, loc.id).seatedActorIds;
 
     // Seat-overflow fix (Task 1.6 review): assignNpcTiles is slot i for

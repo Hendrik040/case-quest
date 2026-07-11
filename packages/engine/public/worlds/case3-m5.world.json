@@ -354,7 +354,7 @@
     {
       "id": "dec-frame-the-plan",
       "prompt": "Before you pitch investors and start hiring, how do you want to frame the KasKazi opportunity?",
-      "requires_facts": ["fact-market-opportunity", "fact-storming-failure", "fact-bsr-coverage-math", "fact-bsr-daily-routine"],
+      "requires_facts": ["fact-market-opportunity", "fact-storming-failure", "fact-bsr-hiring-criteria", "fact-bsr-coverage-math", "fact-bsr-daily-routine"],
       "options": [
         {
           "id": "opt-lead-market-size",
@@ -375,7 +375,7 @@
     {
       "id": "dec-choose-clients",
       "prompt": "Talking to the traders in Kawangware, who should actually pay KasKazi for its services?",
-      "requires_facts": ["fact-manufacturer-natural-client", "fact-wholesaler-passive", "fact-kiosk-survival-debate"],
+      "requires_facts": ["fact-manufacturer-natural-client", "fact-wholesaler-passive", "fact-kiosk-survival-debate", "fact-mass-market-basics", "fact-bulk-breaking", "fact-mini-supermarket-economics"],
       "options": [
         {
           "id": "opt-court-manufacturers",
@@ -396,7 +396,7 @@
     {
       "id": "dec-secure-wholesaler",
       "prompt": "Standing in his warehouse, how do you bring this wholesaler into the KasKazi network?",
-      "requires_facts": ["fact-wholesaler-first-rejection", "fact-wholesaler-deal-terms", "fact-dead-stock-risk", "fact-mass-market-basics", "fact-bulk-breaking"],
+      "requires_facts": ["fact-wholesaler-first-rejection", "fact-wholesaler-deal-terms", "fact-dead-stock-risk", "fact-mass-market-basics", "fact-bulk-breaking", "fact-key-accounts-context"],
       "options": [
         {
           "id": "opt-add-alongside",

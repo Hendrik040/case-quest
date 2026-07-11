@@ -637,3 +637,195 @@ describe("GameSession — spatial traversal (route locations + venue)", () => {
     expect(s.pollSceneActivation()).toBeNull(); // nothing activates before arrival
   });
 });
+
+describe("GameSession — spatial traversal review fixes (M5 Task 5.1 review)", () => {
+  // Regression coverage for the case3-m5.world.json review findings: (1) a node's own
+  // route_locations must be walkable BEFORE any decision/traversal is underway — a fact
+  // required to unlock that node's own decision can be sourced at a route NPC — and
+  // (2) the traversal walkable set must extend with the NEXT node's full
+  // accessible_locations, not just its single venue, so a player can walk through an
+  // intermediate non-venue location (e.g. a warehouse yard/exterior) that sits between
+  // a route location and the venue.
+
+  // Same shape as routedWorld() above, but decide_a requires fact_route (sourced at the
+  // route location loc_street via npc_route) instead of fact_a — reproducing the world's
+  // "node 1's own decision requires a fact only a route NPC provides" pattern.
+  function routeGatedDecisionWorld(): World {
+    return WorldSchema.parse({
+      schema_version: "0.2",
+      meta: {
+        case_id: "route-gated-decision-test",
+        title: "Route-Gated Decision Test World",
+        synopsis: "A node whose own decision requires a fact sourced at a route location.",
+        protagonist_actor_id: "player",
+        start_node_id: "node_a",
+      },
+      learning_objectives: [],
+      actors: [
+        {
+          id: "player", name: "Player", role: "protagonist", is_playable: true,
+          persona: { background: "", personality: "", communication_style: "" },
+          goals: [], knowledge: [],
+        },
+        {
+          id: "npc_route", name: "Rya", role: "npc", is_playable: false,
+          persona: { background: "", personality: "", communication_style: "" },
+          goals: [], knowledge: ["fact_route"],
+          dialogue: { greeting: "Hi from the street", topics: [{ fact_id: "fact_route", line: "Route flavor revealed." }] },
+        },
+        {
+          id: "npc_b", name: "Ben", role: "npc", is_playable: false,
+          persona: { background: "", personality: "", communication_style: "" },
+          goals: [], knowledge: ["fact_b"],
+          dialogue: { greeting: "Hi from B", topics: [{ fact_id: "fact_b", line: "Fact B revealed." }] },
+        },
+      ],
+      locations: [
+        { id: "loc_a_office", name: "Office A", type: "office", exits: ["loc_street"] },
+        { id: "loc_street", name: "Connecting Street", type: "street", exits: ["loc_a_office", "loc_b_venue"] },
+        { id: "loc_b_venue", name: "Boardroom B", type: "boardroom", exits: ["loc_street"] },
+      ],
+      facts: [
+        { id: "fact_route", label: "Route Flavor", content: "street gossip", sources: [{ actor_id: "npc_route", location_id: "loc_street" }] },
+        { id: "fact_b", label: "Fact B", content: "content b", sources: [{ actor_id: "npc_b", location_id: "loc_b_venue" }] },
+      ],
+      decisions: [
+        {
+          id: "decide_a", prompt: "Move to node B?", requires_facts: ["fact_route"],
+          options: [{ id: "go_b", label: "Go to node B", consequence_text: "You head to node B.", illuminates: [], leads_to: "node_b" }],
+        },
+        {
+          id: "decide_b", prompt: "Finish?", requires_facts: ["fact_b"],
+          options: [{ id: "finish", label: "Finish", consequence_text: "You finish.", illuminates: [], leads_to: "end_final" }],
+        },
+      ],
+      nodes: [
+        {
+          id: "node_a", title: "Node A", accessible_locations: ["loc_a_office"], route_locations: ["loc_street"],
+          present_actors: ["npc_route"], available_facts: ["fact_route"], live_decisions: ["decide_a"],
+        },
+        {
+          id: "node_b", title: "Node B", accessible_locations: ["loc_b_venue"],
+          present_actors: ["npc_b"], available_facts: ["fact_b"], live_decisions: ["decide_b"],
+        },
+      ],
+      endings: [
+        { id: "end_final", title: "The End", summary: "You reached the end.", real_case_comparison: "n/a", lo_outcomes: [] },
+      ],
+    });
+  }
+
+  it("a node's own route_locations are walkable before any decision is made, so a route NPC can supply a fact that node's own decision requires", () => {
+    const s = new GameSession(routeGatedDecisionWorld());
+    expect(s.mode()).toBe("roaming");
+    // No traversal is pending yet (no decision chosen) — route_locations must still be
+    // part of the walkable set, or the player can never reach npc_route at all.
+    expect(s.accessibleLocations().map((l) => l.id).sort()).toEqual(["loc_a_office", "loc_street"]);
+    expect(() => s.startDecision("decide_a")).toThrow(); // locked: fact_route not gathered
+
+    s.moveTo("loc_street");
+    const v = s.maybeStartChain();
+    expect(v?.actorId).toBe("npc_route");
+    s.encounterAsk("fact_route");
+    s.encounterMoveOn();
+
+    expect(s.isDecisionUnlocked("decide_a")).toBe(true);
+    s.startDecision("decide_a");
+    expect(s.mode()).toBe("decision");
+  });
+
+  // node_b has TWO accessible_locations: a non-venue "yard" (office type) and the
+  // boardroom venue. The route location only exits into the yard, not directly into the
+  // venue — the yard itself must therefore also be part of the traversal-time walkable
+  // set (not just the single venue) or the path is structurally broken.
+  function multiHopNextNodeWorld(): World {
+    return WorldSchema.parse({
+      schema_version: "0.2",
+      meta: {
+        case_id: "multi-hop-next-node-test",
+        title: "Multi-Hop Next Node Test World",
+        synopsis: "The next node's venue sits behind a non-venue location the route only reaches indirectly.",
+        protagonist_actor_id: "player",
+        start_node_id: "node_a",
+      },
+      learning_objectives: [],
+      actors: [
+        {
+          id: "player", name: "Player", role: "protagonist", is_playable: true,
+          persona: { background: "", personality: "", communication_style: "" },
+          goals: [], knowledge: [],
+        },
+        {
+          id: "npc_a", name: "Ann", role: "npc", is_playable: false,
+          persona: { background: "", personality: "", communication_style: "" },
+          goals: [], knowledge: ["fact_a"],
+          dialogue: { greeting: "Hi from A", topics: [{ fact_id: "fact_a", line: "Fact A revealed." }] },
+        },
+        {
+          id: "npc_b", name: "Ben", role: "npc", is_playable: false,
+          persona: { background: "", personality: "", communication_style: "" },
+          goals: [], knowledge: ["fact_b"],
+          dialogue: { greeting: "Hi from B", topics: [{ fact_id: "fact_b", line: "Fact B revealed." }] },
+        },
+      ],
+      locations: [
+        { id: "loc_a_office", name: "Office A", type: "office", exits: ["loc_street"] },
+        { id: "loc_street", name: "Connecting Street", type: "street", exits: ["loc_a_office", "loc_b_yard"] },
+        // loc_b_yard is NOT a route_location of node_a and NOT the venue of node_b —
+        // it's only reachable at all because it's one of node_b's own accessible_locations.
+        { id: "loc_b_yard", name: "Yard B", type: "warehouse", exits: ["loc_street", "loc_b_venue"] },
+        { id: "loc_b_venue", name: "Boardroom B", type: "boardroom", exits: ["loc_b_yard"] },
+      ],
+      facts: [
+        { id: "fact_a", label: "Fact A", content: "content a", sources: [{ actor_id: "npc_a", location_id: "loc_a_office" }] },
+        { id: "fact_b", label: "Fact B", content: "content b", sources: [{ actor_id: "npc_b", location_id: "loc_b_venue" }] },
+      ],
+      decisions: [
+        {
+          id: "decide_a", prompt: "Move to node B?", requires_facts: ["fact_a"],
+          options: [{ id: "go_b", label: "Go to node B", consequence_text: "You head to node B.", illuminates: [], leads_to: "node_b" }],
+        },
+        {
+          id: "decide_b", prompt: "Finish?", requires_facts: ["fact_b"],
+          options: [{ id: "finish", label: "Finish", consequence_text: "You finish.", illuminates: [], leads_to: "end_final" }],
+        },
+      ],
+      nodes: [
+        {
+          id: "node_a", title: "Node A", accessible_locations: ["loc_a_office"], route_locations: ["loc_street"],
+          present_actors: ["npc_a"], available_facts: ["fact_a"], live_decisions: ["decide_a"],
+        },
+        {
+          id: "node_b", title: "Node B", accessible_locations: ["loc_b_yard", "loc_b_venue"],
+          present_actors: ["npc_b"], available_facts: ["fact_b"], live_decisions: ["decide_b"],
+        },
+      ],
+      endings: [
+        { id: "end_final", title: "The End", summary: "You reached the end.", real_case_comparison: "n/a", lo_outcomes: [] },
+      ],
+    });
+  }
+
+  it("the traversal walkable set extends with the NEXT node's full accessible_locations (not just its venue), so a non-venue intermediate location is walkable", () => {
+    const s = new GameSession(multiHopNextNodeWorld());
+    s.maybeStartChain();
+    s.encounterAsk("fact_a");
+    s.encounterMoveOn();
+    s.startDecision("decide_a");
+    s.chooseOption("decide_a", "go_b", "moving on");
+
+    expect(s.mode()).toBe("traversing");
+    expect(s.accessibleLocations().map((l) => l.id).sort())
+      .toEqual(["loc_a_office", "loc_b_venue", "loc_b_yard", "loc_street"]);
+
+    s.moveTo("loc_street");
+    s.moveTo("loc_b_yard"); // the non-venue intermediate hop — must not throw
+    expect(s.mode()).toBe("traversing"); // arrival not yet triggered (not the venue)
+    expect(s.currentNode().id).toBe("node_a");
+
+    s.moveTo("loc_b_venue");
+    expect(s.currentNode().id).toBe("node_b");
+    expect(s.mode()).toBe("roaming");
+    expect(s.pollSceneActivation()).toEqual({ fromNodeId: "node_a", toNodeId: "node_b" });
+  });
+});
