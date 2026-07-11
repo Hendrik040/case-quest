@@ -332,6 +332,15 @@ describe("GameSession — spatial traversal (route locations + venue)", () => {
           goals: [], knowledge: ["fact_b"],
           dialogue: { greeting: "Hi from B", topics: [{ fact_id: "fact_b", line: "Fact B revealed." }] },
         },
+        {
+          // Non-scene route NPC: home resolves to loc_street (fact_route sourced there;
+          // loc_street is in node_a's route_locations, part of the accessible∪route union
+          // used by homeLocationForActor).
+          id: "npc_route", name: "Rya", role: "npc", is_playable: false,
+          persona: { background: "", personality: "", communication_style: "" },
+          goals: [], knowledge: ["fact_route"],
+          dialogue: { greeting: "Hi from the street", topics: [{ fact_id: "fact_route", line: "Route flavor revealed." }] },
+        },
       ],
       locations: [
         { id: "loc_a_office", name: "Office A", type: "office", exits: ["loc_street"] },
@@ -342,6 +351,7 @@ describe("GameSession — spatial traversal (route locations + venue)", () => {
       facts: [
         { id: "fact_a", label: "Fact A", content: "content a", sources: [{ actor_id: "npc_a", location_id: "loc_a_office" }] },
         { id: "fact_b", label: "Fact B", content: "content b", sources: [{ actor_id: "npc_b", location_id: "loc_b_venue" }] },
+        { id: "fact_route", label: "Route Flavor", content: "street gossip", sources: [{ actor_id: "npc_route", location_id: "loc_street" }] },
       ],
       decisions: [
         {
@@ -356,7 +366,7 @@ describe("GameSession — spatial traversal (route locations + venue)", () => {
       nodes: [
         {
           id: "node_a", title: "Node A", accessible_locations: ["loc_a_office"], route_locations: ["loc_street"],
-          present_actors: ["npc_a"], available_facts: ["fact_a"], live_decisions: ["decide_a"],
+          present_actors: ["npc_a", "npc_route"], available_facts: ["fact_a", "fact_route"], live_decisions: ["decide_a"],
         },
         {
           id: "node_b", title: "Node B", accessible_locations: ["loc_b_venue"],
@@ -422,13 +432,66 @@ describe("GameSession — spatial traversal (route locations + venue)", () => {
     expect(() => s.moveTo("loc_dead_end")).toThrow();
   });
 
-  it("blocks starting encounters/decisions mid-traversal, same as any other non-roaming mode", () => {
+  it("route NPC encounter mid-traversal works (existing mechanics) and returns to traversing", () => {
+    const s = new GameSession(routedWorld());
+    reachDecisionA(s);
+    s.chooseOption("decide_a", "go_b", "moving on");
+    s.moveTo("loc_street");
+    expect(s.mode()).toBe("traversing");
+
+    // Walk-up encounter with the non-scene route NPC via the existing single-NPC flow.
+    const v = s.startEncounterWith("npc_route");
+    expect(s.mode()).toBe("encounter");
+    expect(v.actorId).toBe("npc_route");
+    const { line } = s.encounterAsk("fact_route");
+    expect(line).toContain("Route flavor");
+    expect(s.isFactGathered("fact_route")).toBe(true);
+
+    // Closing the encounter returns to traversing (arrival still pending), not plain roaming.
+    expect(s.encounterMoveOn().next).toBeNull();
+    expect(s.mode()).toBe("traversing");
+    expect(s.currentNode().id).toBe("node_a"); // no teleport
+    expect(s.pollSceneActivation()).toBeNull();
+
+    // The pending traversal target survived the encounter: arrival still activates node B.
+    s.moveTo("loc_b_venue");
+    expect(s.currentNode().id).toBe("node_b");
+    expect(s.mode()).toBe("roaming");
+    expect(s.pollSceneActivation()).toEqual({ fromNodeId: "node_a", toNodeId: "node_b" });
+  });
+
+  it("maybeStartChain fires at a route location mid-traversal without re-teleporting", () => {
+    const s = new GameSession(routedWorld());
+    reachDecisionA(s);
+    s.chooseOption("decide_a", "go_b", "moving on");
+    s.moveTo("loc_street");
+
+    const v = s.maybeStartChain();
+    expect(v?.actorId).toBe("npc_route");
+    expect(s.mode()).toBe("encounter");
+    while (s.encounterMoveOn().next) { /* drain chain */ }
+    expect(s.mode()).toBe("traversing");
+    expect(s.currentNode().id).toBe("node_a");
+    expect(s.currentLocationId()).toBe("loc_street");
+  });
+
+  it("gathering a flavor fact from a route location works mid-traversal", () => {
+    const s = new GameSession(routedWorld());
+    reachDecisionA(s);
+    s.chooseOption("decide_a", "go_b", "moving on");
+    s.moveTo("loc_street");
+    s.gatherFactFromLocation("fact_route");
+    expect(s.isFactGathered("fact_route")).toBe(true);
+    expect(s.mode()).toBe("traversing");
+  });
+
+  it("decisions stay blocked mid-traversal; scene activation happens only on arrival", () => {
     const s = new GameSession(routedWorld());
     reachDecisionA(s);
     s.chooseOption("decide_a", "go_b", "moving on");
     expect(s.mode()).toBe("traversing");
-    expect(s.maybeStartChain()).toBeNull();
-    expect(() => s.startEncounterWith("npc_a")).toThrow();
     expect(() => s.startDecision("decide_b")).toThrow();
+    expect(s.pollDecisionPrompt()).toBe(false);
+    expect(s.pollSceneActivation()).toBeNull(); // nothing activates before arrival
   });
 });

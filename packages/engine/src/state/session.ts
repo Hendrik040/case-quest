@@ -33,7 +33,7 @@ export class GameSession {
   private readonly choices: ChoiceRecord[] = [];
   private endingId: string | null = null;
 
-  private internalMode: "roaming" | "encounter" | "decision" | "traversing" = "roaming";
+  private internalMode: "roaming" | "encounter" | "decision" = "roaming";
   private chain: string[] = [];
   private chainIdx = 0;
   private readonly visited = new Set<string>();
@@ -42,9 +42,14 @@ export class GameSession {
   // Traversal sub-state (M5 spatial progression): set by chooseOption when the next node
   // has a venue-typed location. The player keeps walking within the COMPLETED node's world
   // (currentNodeId doesn't change yet) until they reach the next node's venue via moveTo,
-  // which triggers arriveAtNextNode(). sceneActivation is a one-shot poll flag, mirroring
-  // the existing pollDecisionPrompt() idiom, so callers (WorldScene/App, Task 1.6) can
-  // detect the transition and emit their own bus event without GameSession depending on
+  // which triggers arriveAtNextNode(). Traversal is ORTHOGONAL to internalMode: the player
+  // is still "roaming" underneath (so route NPC encounters and flavor-fact gathering — the
+  // existing mechanics — keep working on route locations, per the design spec's "routes may
+  // hold flavor facts and non-scene NPCs but no scene encounters"); mode() reports
+  // "traversing" when roaming with a pending traversal. Decisions are explicitly blocked
+  // while a traversal is pending. sceneActivation is a one-shot poll flag, mirroring the
+  // existing pollDecisionPrompt() idiom, so callers (WorldScene/App, Task 1.6) can detect
+  // the transition and emit their own bus event without GameSession depending on
   // bridge/events.ts (GameSession stays network/UI-free).
   private traversal: { toNodeId: string; targetLocationId: string; routeLocations: string[] } | null = null;
   private sceneActivation: SceneActivation | null = null;
@@ -78,7 +83,7 @@ export class GameSession {
   // with its route_locations and the next node's venue (the traversal target).
   private walkableLocationIds(): string[] {
     const node = this.currentNode();
-    if (this.internalMode === "traversing" && this.traversal) {
+    if (this.traversal) {
       return [...new Set([
         ...node.accessible_locations,
         ...this.traversal.routeLocations,
@@ -112,7 +117,13 @@ export class GameSession {
   }
 
   // --- encounter machine ---
-  mode(): SessionMode { return this.isEnded() ? "debrief" : this.internalMode; }
+  mode(): SessionMode {
+    if (this.isEnded()) return "debrief";
+    // "traversing" is derived: roaming with a pending traversal. Encounters opened on a
+    // route report "encounter" as usual, and closing them re-surfaces as "traversing".
+    if (this.internalMode === "roaming" && this.traversal) return "traversing";
+    return this.internalMode;
+  }
 
   // One-shot poll for the traversal→next-node transition, mirroring pollDecisionPrompt()'s
   // idiom: returns the transition exactly once, then clears it. WorldScene/App (Task 1.6)
@@ -205,6 +216,7 @@ export class GameSession {
   }
 
   pollDecisionPrompt(): boolean {
+    if (this.traversal) return false; // decisions never prompt mid-traversal
     if (this.decisionPrompted) return false;
     const first = this.liveDecisions()[0];
     if (!first || !this.isDecisionUnlocked(first.id)) return false;
@@ -214,6 +226,7 @@ export class GameSession {
 
   startDecision(decisionId: string): void {
     this.assertActive();
+    if (this.traversal) throw new Error("cannot start a decision while traversing");
     if (this.internalMode !== "roaming") throw new Error("cannot start a decision outside roaming");
     if (!this.currentNode().live_decisions.includes(decisionId)) throw new Error(`decision "${decisionId}" is not live here`);
     if (!this.isDecisionUnlocked(decisionId)) throw new Error(`decision "${decisionId}" is locked`);
@@ -240,7 +253,7 @@ export class GameSession {
       throw new Error(`cannot move to "${locationId}" from "${this.locationId}"`);
     }
     this.locationId = locationId;
-    if (this.internalMode === "traversing" && this.traversal && locationId === this.traversal.targetLocationId) {
+    if (this.traversal && locationId === this.traversal.targetLocationId) {
       this.arriveAtNextNode();
     }
   }
@@ -329,7 +342,9 @@ export class GameSession {
         targetLocationId: venue,
         routeLocations: [...(completedNode.route_locations ?? [])],
       };
-      this.internalMode = "traversing";
+      // Underneath, the player keeps roaming the completed node's (extended) world;
+      // mode() derives "traversing" from the pending traversal.
+      this.internalMode = "roaming";
     }
     return { endedAt: "node" };
   }
