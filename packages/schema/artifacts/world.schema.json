@@ -6,7 +6,7 @@
       "properties": {
         "schema_version": {
           "type": "string",
-          "const": "0.1"
+          "const": "0.2"
         },
         "meta": {
           "type": "object",
@@ -189,6 +189,9 @@
                   }
                 },
                 "additionalProperties": false
+              },
+              "platform_persona_id": {
+                "type": "number"
               }
             },
             "required": [
@@ -393,6 +396,15 @@
                 "items": {
                   "type": "string"
                 }
+              },
+              "route_locations": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "platform_scene_id": {
+                "type": "number"
               }
             },
             "required": [

@@ -213,7 +213,7 @@ describe("GameSession — multi-node decision path", () => {
   // node B (another StoryNode), not straight to an ending.
   function twoNodeWorld(): World {
     return WorldSchema.parse({
-      schema_version: "0.1",
+      schema_version: "0.2",
       meta: {
         case_id: "multi-node-test",
         title: "Multi-Node Test World",

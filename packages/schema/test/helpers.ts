@@ -12,7 +12,7 @@ export function clone<T>(x: T): T {
 // A tiny valid 2-node branching world used for graph/solvability tests.
 export function minimalWorld(): World {
   return {
-    schema_version: "0.1",
+    schema_version: "0.2",
     meta: { case_id: "min", title: "Min", synopsis: "s", protagonist_actor_id: "owner", start_node_id: "n1" },
     learning_objectives: [{ id: "lo1", text: "objective" }],
     actors: [

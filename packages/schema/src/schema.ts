@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /** The one and only source of truth for the schema version. */
-export const SCHEMA_VERSION = "0.1" as const;
+export const SCHEMA_VERSION = "0.2" as const;
 
 export const LOCATION_TYPES = [
   "office", "boardroom", "factory_floor", "shopfront",
@@ -36,6 +36,8 @@ export const ActorSchema = z.object({
   knowledge: z.array(z.string()),
   dialogue: ActorDialogueSchema.optional(),
   sprite: SpriteHintsSchema.optional(),
+  /** Crosswalk id linking this actor to a persona in the traversal/meeting-encounter platform. */
+  platform_persona_id: z.number().optional(),
 });
 
 export const LocationSchema = z.object({
@@ -80,6 +82,10 @@ export const StoryNodeSchema = z.object({
   present_actors: z.array(z.string()),
   available_facts: z.array(z.string()),
   live_decisions: z.array(z.string()),
+  /** Location ids the player can walk/route between while in this node, for the traversal world. */
+  route_locations: z.array(z.string()).optional(),
+  /** Crosswalk id linking this node to a scene in the traversal/meeting-encounter platform. */
+  platform_scene_id: z.number().optional(),
 });
 
 export const EndingSchema = z.object({
